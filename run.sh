@@ -1,7 +1,7 @@
 #!/bin/bash
 set -xue
-QEMU=/opt/homebrew/bin/qemu-system-riscv32
-CC=/opt/homebrew/opt/llvm/bin/clang
+QEMU=qemu-system-riscv32
+CC=clang
 
 CFLAGS="-std=c11 -O2 -g3 -Wall -Wextra --target=riscv32 -ffreestanding -nostdlib"
 

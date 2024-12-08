@@ -17,7 +17,7 @@ SECTIONS {
     *(.bss .bss.* .sbss .sbss.*);
     __bss_end = .;
   }
-  . = ALIGN(4)
+  . = ALIGN(4);
   . += 128 * 1024; /* 128KB */
   __stack_top = .;
 }
