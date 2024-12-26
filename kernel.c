@@ -129,15 +129,137 @@ void kernel_entry(void) {
   );
 }
 
+// context switch
+struct process procs[PROCS_MAX];
+
+__attribute__((naked))
+void switch_context(uint32_t *prev_sp, uint32_t *next_sp) {
+  __asm__ __volatile__(
+    "addi sp, sp, -13 * 4\n"
+    "sw ra, 4 * 0(sp)\n"
+    "sw s0, 4 * 1(sp)\n"
+    "sw s1, 4 * 2(sp)\n"
+    "sw s2, 4 * 3(sp)\n"
+    "sw s3, 4 * 4(sp)\n"
+    "sw s4, 4 * 5(sp)\n"
+    "sw s5, 4 * 6(sp)\n"
+    "sw s6, 4 * 7(sp)\n"
+    "sw s7, 4 * 8(sp)\n"
+    "sw s8, 4 * 9(sp)\n"
+    "sw s9, 4 * 10(sp)\n"
+    "sw s10, 4 * 11(sp)\n"
+    "sw s11, 4 * 12(sp)\n"
+    "sw sp, (a0)\n" // store current sp to memory pointed by a0
+    "lw sp, (a1)\n" // load next sp from memory pointed by a1
+    "lw ra, 4 * 0(sp)\n"
+    "lw s0, 4 * 1(sp)\n"
+    "lw s1, 4 * 2(sp)\n"
+    "lw s2, 4 * 3(sp)\n"
+    "lw s3, 4 * 4(sp)\n"
+    "lw s4, 4 * 5(sp)\n"
+    "lw s5, 4 * 6(sp)\n"
+    "lw s6, 4 * 7(sp)\n"
+    "lw s7, 4 * 8(sp)\n"
+    "lw s8, 4 * 9(sp)\n"
+    "lw s9, 4 * 10(sp)\n"
+    "lw s10, 4 * 11(sp)\n"
+    "lw s11, 4 * 12(sp)\n"
+    "addi sp, sp, 13 * 4\n"
+    "ret\n"
+  );
+}
+
+struct process *create_process(uint32_t pc) {
+  // find an unused process
+  struct process *proc = NULL;
+  int i;
+  for (i = 0; i < PROCS_MAX; i++) {
+    if (procs[i].state == PROC_UNUSED) {
+      proc = &procs[i];
+      break;
+    }
+  }
+  if (!proc) {
+    PANIC("no available process slot");
+  }
+  // initialize process
+  uint32_t *sp = (uint32_t *) &proc->stack[sizeof(proc->stack)];
+  *--sp = 0;                      // s11
+  *--sp = 0;                      // s10
+  *--sp = 0;                      // s9
+  *--sp = 0;                      // s8
+  *--sp = 0;                      // s7
+  *--sp = 0;                      // s6
+  *--sp = 0;                      // s5
+  *--sp = 0;                      // s4
+  *--sp = 0;                      // s3
+  *--sp = 0;                      // s2
+  *--sp = 0;                      // s1
+  *--sp = 0;                      // s0
+  *--sp = (uint32_t) pc;          // ra
+
+  proc->pid = i + 1;
+  proc->state = PROC_RUNNABLE;
+  proc->sp = (uint32_t) sp;
+  return proc;
+}
+
+struct process *current_proc;
+struct process *idle_proc;
+
+// scheduler
+void yield(void) {
+  struct process *next = idle_proc;
+  for (int i = 0; i < PROCS_MAX; i++) {
+    struct process *proc = &procs[(current_proc->pid + i) % PROCS_MAX];
+    if (proc->state == PROC_RUNNABLE && proc->pid > 0) {
+      next = proc;
+      break;
+    }
+  }
+  if (next == current_proc) {
+    return;
+  }
+  struct process *prev = current_proc;
+  current_proc = next;
+  switch_context(&prev->sp, &next->sp);
+}
+
+struct process *proc_a;
+struct process *proc_b;
+
+void proc_a_entry(void) {
+    printf("starting process A\n");
+    while (1) {
+        putchar('A');
+        switch_context(&proc_a->sp, &proc_b->sp);
+
+        for (int i = 0; i < 30000000; i++)
+            __asm__ __volatile__("nop");
+    }
+}
+
+void proc_b_entry(void) {
+    printf("starting process B\n");
+    while (1) {
+        putchar('B');
+        switch_context(&proc_b->sp, &proc_a->sp);
+
+        for (int i = 0; i < 30000000; i++)
+            __asm__ __volatile__("nop");
+    }
+}
+
 void kernel_main(void) {
   memset(__bss, 0, (size_t) __bss_end - (size_t) __bss);
   
-  paddr_t paddr0 = alloc_pages(2);
-  paddr_t paddr1 = alloc_pages(1);
-  printf("alloc_pages test: paddr0=%x\n", paddr0);
-  printf("alloc_pages test: paddr1=%x\n", paddr1);
+  WRITE_CSR(stvec, (uint32_t) kernel_entry);
 
-  PANIC("booted");
+  proc_a = create_process((uint32_t) proc_a_entry);
+  proc_b = create_process((uint32_t) proc_b_entry);
+  proc_a_entry();
+
+  PANIC("kernel_main returned");
 }
 
 __attribute__((section(".text.boot"))) // place this function in .text.boot section
