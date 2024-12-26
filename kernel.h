@@ -6,12 +6,6 @@ struct sbiret {
   long value;
 };
 
-#define PANIC(fmt, ...)\
-  do {\
-    printf("PANIC: %s:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__);\
-    while (1) {}\
-  } while (0) // only a single loop. this is for executing multiple-line macros
-
 struct trap_frame {
     uint32_t ra;
     uint32_t gp;
@@ -46,15 +40,21 @@ struct trap_frame {
     uint32_t sp;
 } __attribute__((packed));
 
-#define READ_CSR(reg)                                                          \
-  ({                                                                         \
+#define READ_CSR(reg)                                                      \
+  ({                                                                       \
     unsigned long __tmp;                                                   \
     __asm__ __volatile__("csrr %0, " #reg : "=r"(__tmp));                  \
     __tmp;                                                                 \
   })
 
-#define WRITE_CSR(reg, value)                                                  \
-  do {                                                                       \
+#define WRITE_CSR(reg, value)                                              \
+  do {                                                                     \
     uint32_t __tmp = (value);                                              \
     __asm__ __volatile__("csrw " #reg ", %0" ::"r"(__tmp));                \
   } while (0)
+
+#define PANIC(fmt, ...)                                                        \
+    do {                                                                       \
+        printf("PANIC: %s:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__);  \
+        while (1) {}                                                           \
+    } while (0) // only a single loop. this is for executing multiple-line macros

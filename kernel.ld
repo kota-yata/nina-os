@@ -20,4 +20,10 @@ SECTIONS {
   . = ALIGN(4);
   . += 128 * 1024; /* 128KB */
   __stack_top = .;
+
+  /* Assign __free_ram to __free_ram_end to dynamically allocatable range */
+  . = ALIGN(4096); /* Align each 4KB */
+  __free_ram = .;
+  . += 64 * 1024 * 1024; /* 64MB range */
+  __free_ram_end = .;
 }
