@@ -55,8 +55,13 @@ __attribute__((naked))
 __attribute__((aligned(4)))
 void kernel_entry(void) {
   __asm__ __volatile__ (
-    "csrw sscratch, sp\n" // Store the stack pointer in sscratch
-    "addi sp, sp, -4 * 31\n" // Allocate space for 31 registers
+    // csrrw is basically a swap operation
+    // load the stack address of the current process from sscratch, which is stored in yield()
+    // at the same time, store the current stack pointer (= sp of when the trap occurred) to sscratch
+    "csrrw sp, sscratch, sp\n"
+    // allocate space for 31 registers
+    "addi sp, sp, -4 * 31\n"
+    // Save the current registers (= process state) to the stack
     "sw ra, 4 * 0(sp)\n"
     "sw gp, 4 * 1(sp)\n"
     "sw tp, 4 * 2(sp)\n"
@@ -88,10 +93,14 @@ void kernel_entry(void) {
     "sw s10, 4 * 28(sp)\n"
     "sw s11, 4 * 29(sp)\n"
 
-    "csrr a0, sscratch\n" // Load the stack pointer from sscratch
-    "sw a0, 4 * 30(sp)\n" // Save the stack pointer value to the 30th in the stack
+    "csrr a0, sscratch\n" // Load the sp of when the trap occurred
+    "sw a0, 4 * 30(sp)\n" // Save the stack pointer value to the stack
 
-    "mv a0, sp\n" // Pass the stack pointer to kernel_entry
+    // reset the stack pointer to the top of the stack
+    "addi a0, sp, 4 * 31\n"
+    "csrw sscratch, a0\n"
+
+    "mv a0, sp\n" // Pass the stack pointer to a0
     "call handle_trap\n"
 
     "lw ra, 4 * 0(sp)\n"
@@ -207,9 +216,10 @@ struct process *create_process(uint32_t pc) {
 struct process *current_proc;
 struct process *idle_proc;
 
-// scheduler
+// process scheduler
 void yield(void) {
   struct process *next = idle_proc;
+  // find executable process
   for (int i = 0; i < PROCS_MAX; i++) {
     struct process *proc = &procs[(current_proc->pid + i) % PROCS_MAX];
     if (proc->state == PROC_RUNNABLE && proc->pid > 0) {
@@ -220,6 +230,15 @@ void yield(void) {
   if (next == current_proc) {
     return;
   }
+
+  // store the current process's stack pointer to sscratch
+  __asm__ __volatile__(
+    "csrw sscratch, %[sscratch]\n"
+    :
+    // sp address will be the end of next stack's address as stack is growing downwards
+    : [sscratch] "r" ((uint32_t) &next->stack[sizeof(next->stack)])
+  );
+
   struct process *prev = current_proc;
   current_proc = next;
   switch_context(&prev->sp, &next->sp);
@@ -232,7 +251,7 @@ void proc_a_entry(void) {
     printf("starting process A\n");
     while (1) {
         putchar('A');
-        switch_context(&proc_a->sp, &proc_b->sp);
+        yield();
 
         for (int i = 0; i < 30000000; i++)
             __asm__ __volatile__("nop");
@@ -243,7 +262,7 @@ void proc_b_entry(void) {
     printf("starting process B\n");
     while (1) {
         putchar('B');
-        switch_context(&proc_b->sp, &proc_a->sp);
+        yield();
 
         for (int i = 0; i < 30000000; i++)
             __asm__ __volatile__("nop");
@@ -255,9 +274,14 @@ void kernel_main(void) {
   
   WRITE_CSR(stvec, (uint32_t) kernel_entry);
 
+  idle_proc = create_process((uint32_t) NULL);
+  idle_proc->pid = -1;
+  current_proc = idle_proc;
+
   proc_a = create_process((uint32_t) proc_a_entry);
   proc_b = create_process((uint32_t) proc_b_entry);
-  proc_a_entry();
+
+  yield();
 
   PANIC("kernel_main returned");
 }
