@@ -259,14 +259,39 @@ void proc_a_entry(void) {
 }
 
 void proc_b_entry(void) {
-    printf("starting process B\n");
-    while (1) {
-        putchar('B');
-        yield();
+  printf("starting process B\n");
+  while (1) {
+      putchar('B');
+      yield();
 
-        for (int i = 0; i < 30000000; i++)
-            __asm__ __volatile__("nop");
-    }
+      for (int i = 0; i < 30000000; i++)
+          __asm__ __volatile__("nop");
+  }
+}
+
+// virtual table
+// refer to https://vlsi.jp/UnderstandMMU.html when you get confused
+// sv32 consists of 2-level page table entry
+void map_page(uint32_t *table1, uint32_t vaddr, paddr_t paddr, uint32_t flags){
+  if (!is_aligned(vaddr, PAGE_SIZE)) {
+    PANIC("unalined vaddr %x", vaddr);
+  }
+  if (!is_aligned(paddr, PAGE_SIZE)) {
+    PANIC("unalined paddr %x", paddr);
+  }
+
+  uint32_t vpn1 = (vaddr >> 22) & 0x3ff; // crop the first 10 bits (32-22) and mask with 0x3ff (10 of 1s)
+
+  if ((table1[vpn1] & PAGE_V) == 0) {
+    uint32_t pt_paddr = alloc_pages(1);
+    table1[vpn1] = ((pt_paddr / PAGE_SIZE) << 10) | PAGE_V;
+  }
+
+  uint32_t vpn0 = (vaddr >> 12) & 0x3ff;
+
+  uint32_t *table0 = (uint32_t *) ((table1[vpn1] >> 10) * PAGE_SIZE); // basically trying to get pt_paddr
+
+  table0[vpn0] = ((paddr / PAGE_SIZE) << 10) | flags | PAGE_V;
 }
 
 void kernel_main(void) {
