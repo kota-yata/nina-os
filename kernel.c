@@ -288,11 +288,12 @@ struct process *proc_b;
 void proc_a_entry(void) {
     printf("starting process A\n");
     while (1) {
-        putchar('A');
-        yield();
+      putchar('A');
+      yield();
 
-        for (int i = 0; i < 30000000; i++)
-            __asm__ __volatile__("nop");
+      for (int i = 0; i < 30000000; i++){
+        __asm__ __volatile__("nop");
+      }
     }
 }
 
@@ -302,8 +303,9 @@ void proc_b_entry(void) {
       putchar('B');
       yield();
 
-      for (int i = 0; i < 30000000; i++)
-          __asm__ __volatile__("nop");
+      for (int i = 0; i < 30000000; i++){
+        __asm__ __volatile__("nop");
+      }
   }
 }
 
