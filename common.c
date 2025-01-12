@@ -31,15 +31,13 @@ void *strcpy(char *dst, const char *src) {
 
 int strcmp(const char *s1, const char *s2) {
   while (*s1 && *s2) {
-    if (*s1 && *s2) {
-      if (*s1 != *s2) {
-        break;
-      }
-      s1++;
-      s2++;
+    if (*s1 != *s2) {
+      break;
     }
-    return *(unsigned char *)s1 - *(unsigned char *)s2; // cast to unsigned char to align with POSIX standard
+    s1++;
+    s2++;
   }
+  return *(unsigned char *)s1 - *(unsigned char *)s2; // cast to unsigned char to align with POSIX standard
 }
 
 void printf(const char *fmt, ...) {

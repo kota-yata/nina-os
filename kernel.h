@@ -1,6 +1,7 @@
 #pragma once
 #include "common.h"
 
+// return value of sbi_call
 struct sbiret {
   long error;
   long value;
@@ -43,6 +44,7 @@ struct trap_frame {
 #define PROCS_MAX 8
 #define PROC_UNUSED 0
 #define PROC_RUNNABLE 1
+#define PROC_EXITED 2
 
 struct process {
   int pid;

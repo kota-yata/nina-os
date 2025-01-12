@@ -28,6 +28,11 @@ void putchar(char ch) {
   sbi_call(ch, 0, 0, 0, 0, 0, 0, 1);
 }
 
+long getchar(void) {
+  struct sbiret ret = sbi_call(0, 0, 0, 0, 0, 0, 0, 2);
+  return ret.error;
+}
+
 // Linear memory allocation with no free
 paddr_t alloc_pages(uint32_t n) {
   static paddr_t next_paddr = (paddr_t) __free_ram;
@@ -41,32 +46,6 @@ paddr_t alloc_pages(uint32_t n) {
   memset((void *) paddr, 0, n * PAGE_SIZE);
   return paddr;
 }
-
-void handle_syscall(struct trap_frame *f) {
-  switch (f->a3) {
-    case SYS_PUTCHAR:
-      putchar(f->a0);
-      break;
-    default:
-      PANIC("unknown syscall a3=%x\n", f->a3);
-  }
-}
-
-void handle_trap(struct trap_frame *f) {
-  uint32_t scause = READ_CSR(scause);
-  uint32_t stval = READ_CSR(stval);
-  uint32_t user_pc = READ_CSR(sepc);
-
-  if (scause == SCAUSE_ECALL) {
-    handle_syscall(f);
-    user_pc += 4;
-  } else {
-    PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
-  }
-
-  WRITE_CSR(sepc, user_pc);
-}
-
 // Exception handler
 __attribute__((naked))
 __attribute__((aligned(4)))
@@ -265,7 +244,7 @@ struct process *create_process(const void *image, size_t image_size) {
   *--sp = 0;                      // s2
   *--sp = 0;                      // s1
   *--sp = 0;                      // s0
-  *--sp = (uint32_t) user_entry;          // ra (return address)
+  *--sp = (uint32_t) user_entry;  // ra (return address)
 
   uint32_t *page_table = (uint32_t *) alloc_pages(1);
 
@@ -283,7 +262,7 @@ struct process *create_process(const void *image, size_t image_size) {
 
     memcpy((void *) page, image + off, copy_size);
 
-    map_page(page_table, USER_BASE + off, page, PAGE_U | PAGE_R | PAGE_X);
+    map_page(page_table, USER_BASE + off, page, PAGE_U | PAGE_R | PAGE_W | PAGE_X);
   }
 
   proc->pid = i + 1;
@@ -327,6 +306,49 @@ void yield(void) {
   current_proc = next;
   switch_context(&prev->sp, &next->sp);
 }
+
+void handle_syscall(struct trap_frame *f) {
+  switch (f->a3) {
+    case SYS_PUTCHAR:
+      putchar(f->a0);
+      break;
+    case SYS_GETCHAR:
+      // wait until a character is available
+      while (1) {
+        long ch = getchar();
+        if (ch >= 0) {
+          f->a0 = ch;
+          break;
+        }
+        yield(); // yield to other processes for every loop because otherwise it will dominate the CPU
+      }
+      break;
+    case SYS_EXIT:
+      // in the actual OS, the page table and memory for this process should be freed
+      printf("process %d exited\n", current_proc->pid);
+      current_proc->state = PROC_EXITED;
+      yield();
+      PANIC("accessing exited process");
+    default:
+      PANIC("unknown syscall a3=%x\n", f->a3);
+  }
+}
+
+void handle_trap(struct trap_frame *f) {
+  uint32_t scause = READ_CSR(scause);
+  uint32_t stval = READ_CSR(stval);
+  uint32_t user_pc = READ_CSR(sepc);
+
+  if (scause == SCAUSE_ECALL) {
+    handle_syscall(f);
+    user_pc += 4;
+  } else {
+    PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
+  }
+
+  WRITE_CSR(sepc, user_pc);
+}
+
 
 struct process *proc_a;
 struct process *proc_b;
