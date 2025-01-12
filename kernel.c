@@ -42,12 +42,29 @@ paddr_t alloc_pages(uint32_t n) {
   return paddr;
 }
 
+void handle_syscall(struct trap_frame *f) {
+  switch (f->a3) {
+    case SYS_PUTCHAR:
+      putchar(f->a0);
+      break;
+    default:
+      PANIC("unknown syscall a3=%x\n", f->a3);
+  }
+}
+
 void handle_trap(struct trap_frame *f) {
   uint32_t scause = READ_CSR(scause);
   uint32_t stval = READ_CSR(stval);
   uint32_t user_pc = READ_CSR(sepc);
 
-  PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
+  if (scause == SCAUSE_ECALL) {
+    handle_syscall(f);
+    user_pc += 4;
+  } else {
+    PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
+  }
+
+  WRITE_CSR(sepc, user_pc);
 }
 
 // Exception handler
@@ -203,8 +220,25 @@ void map_page(uint32_t *table1, uint32_t vaddr, paddr_t paddr, uint32_t flags){
   table0[vpn0] = ((paddr / PAGE_SIZE) << 10) | flags | PAGE_V;
 }
 
+// user mode
+extern char _binary_shell_bin_start[], _binary_shell_bin_size[];
+__attribute__((naked))
+void user_entry(void) {
+  // set the user program counter to sepc
+  // set the supervisor status to SPIE
+  __asm__ __volatile__(
+    "csrw sepc, %[sepc]\n"
+    "csrw sstatus, %[sstatus]\n"
+    "sret\n"
+    :
+    : [sepc] "r" (USER_BASE),
+      [sstatus] "r" (SSTATUS_SPIE)
+  );
+}
+
 extern char __kernel_base[];
-struct process *create_process(uint32_t pc) {
+// image: image of an application program
+struct process *create_process(const void *image, size_t image_size) {
   // find an unused process
   struct process *proc = NULL;
   int i;
@@ -231,13 +265,25 @@ struct process *create_process(uint32_t pc) {
   *--sp = 0;                      // s2
   *--sp = 0;                      // s1
   *--sp = 0;                      // s0
-  *--sp = (uint32_t) pc;          // ra (return address)
+  *--sp = (uint32_t) user_entry;          // ra (return address)
 
   uint32_t *page_table = (uint32_t *) alloc_pages(1);
 
   // map the kernel memory to the process (__kernel_base ~ __free_ram_end)
   for (paddr_t paddr = (paddr_t) __kernel_base; paddr < (paddr_t) __free_ram_end; paddr += PAGE_SIZE) {
     map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
+  }
+
+  for (uint32_t off = 0; off < image_size; off += PAGE_SIZE) {
+    paddr_t page = alloc_pages(1);
+
+    // the last page may not be aligned to PAGE_SIZE
+    size_t remaining = image_size - off;
+    size_t copy_size = PAGE_SIZE <= remaining ? PAGE_SIZE : remaining;
+
+    memcpy((void *) page, image + off, copy_size);
+
+    map_page(page_table, USER_BASE + off, page, PAGE_U | PAGE_R | PAGE_X);
   }
 
   proc->pid = i + 1;
@@ -314,18 +360,15 @@ void kernel_main(void) {
   
   WRITE_CSR(stvec, (uint32_t) kernel_entry);
 
-  printf("Hello, RISC-V!\n");
-
-  idle_proc = create_process((uint32_t) NULL);
+  idle_proc = create_process(NULL, 0);
   idle_proc->pid = -1;
   current_proc = idle_proc;
 
-  proc_a = create_process((uint32_t) proc_a_entry);
-  proc_b = create_process((uint32_t) proc_b_entry);
+  create_process(_binary_shell_bin_start, (size_t) _binary_shell_bin_size);
 
   yield();
 
-  PANIC("kernel_main returned");
+  PANIC("switched to idle process");
 }
 
 __attribute__((section(".text.boot"))) // place this function in .text.boot section

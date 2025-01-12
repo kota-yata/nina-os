@@ -21,6 +21,9 @@ typedef uint32_t vaddr_t;
 #define va_arg __builtin_va_arg
 #define PAGE_SIZE 4096
 
+// system call
+#define SYS_PUTCHAR 1
+
 void *memset(void *buf, char c, size_t n);
 void *memcpy(void *dst, const void *src, size_t n);
 void *strcpy(char *dst, const char *src);
