@@ -199,6 +199,97 @@ void map_page(uint32_t *table1, uint32_t vaddr, paddr_t paddr, uint32_t flags){
   table0[vpn0] = ((paddr / PAGE_SIZE) << 10) | flags | PAGE_V;
 }
 
+// virtio
+uint32_t virtio_reg_read32(unsigned offset) {
+  return *((volatile uint32_t *) (VIRTIO_BLK_PADDR + offset));
+}
+uint64_t virtio_reg_read64(unsigned offset) {
+  return *((volatile uint64_t *) (VIRTIO_BLK_PADDR + offset));
+}
+void virtio_reg_write32(unsigned offset, uint32_t value) {
+  *((volatile uint32_t *) (VIRTIO_BLK_PADDR + offset)) = value;
+}
+
+void virtio_reg_fetch_and_or32(unsigned offset, uint32_t value) {
+  virtio_reg_write32(offset, virtio_reg_read32(offset) | value);
+}
+
+struct virtio_virtq *virtq_init(unsigned index) {
+  paddr_t virtq_paddr = alloc_pages(align_up(sizeof(struct virtio_virtq), PAGE_SIZE) / PAGE_SIZE);
+  struct virtio_virtq *vq = (struct virtio_virtq *) virtq_paddr;
+  vq->queue_index = index;
+  vq->used_index = (volatile uint16_t *) &vq->used.index;
+  // select the queue writing its index to queuesel
+  virtio_reg_write32(VIRTIO_REG_QUEUE_SEL, index);
+  // checks the queue is not already in use
+  uint32_t vq_pfn = virtio_reg_read32(VIRTIO_REG_QUEUE_PFN);
+  if (vq_pfn == 0) {
+    PANIC("virtio: invalid queue pfn");
+  }
+  // read max queue size
+  uint32_t vq_size = virtio_reg_read32(VIRTIO_REG_QUEUE_NUM_MAX);
+  if (vq_size == 0) {
+    PANIC("virtio: invalid queue size");
+  }
+  // omitting the step 4
+  // notify the device about the queue size
+  virtio_reg_write32(VIRTIO_REG_QUEUE_NUM, VIRTQ_ENTRY_NUM);
+  // notify the device about the used alignment
+  virtio_reg_write32(VIRTIO_REG_QUEUE_ALIGN, 0x1000);
+  // write the physical number of the first page of the queue
+  virtio_reg_write32(VIRTIO_REG_QUEUE_PFN, virtq_paddr);
+  return vq;
+}
+
+struct virtio_virtq *blk_request_vq;
+struct virtio_blk_req *blk_req;
+paddr_t blk_req_paddr;
+unsigned blk_capacity;
+
+void virtio_blk_init(void) {
+  if (virtio_reg_read32(VIRTIO_REG_MAGIC) != 0x74726976)
+    PANIC("virtio: invalid magic value");
+  if (virtio_reg_read32(VIRTIO_REG_VERSION) != 1)
+    PANIC("virtio: invalid version");
+  if (virtio_reg_read32(VIRTIO_REG_DEVICE_ID) != VIRTIO_DEVICE_BLK)
+    PANIC("virtio: invalid device id");
+  
+  // reset the device
+  virtio_reg_write32(VIRTIO_REG_DEVICE_STATUS, 0);
+  // set the ACKNOWLEDGE status bit
+  virtio_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_ACK);
+  // set the DRIVER status bit
+  virtio_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER);
+  // omitting step 4 at this point
+  // set the FEATURES_OK status bit
+  virtio_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_FEAT_OK);
+  // omitting step 6, which checks the device status bit to ensure the FEATURES_OK bit is still set
+  // perform driver-specific setup
+  blk_request_vq = virtq_init(0);
+  // set the DRIVER_OK status bit
+  virtio_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER_OK);
+
+  // get the capacity of the block device
+  blk_capacity = virtio_reg_read64(VIRTIO_REG_DEVICE_CONFIG + 0) * SECTOR_SIZE;
+  printf("virtio-blk: capacity=%d bytes\n", blk_capacity);
+
+  // allocate a page for the request (1 virtio_blk_req)
+  blk_req_paddr = alloc_pages(align_up(sizeof(*blk_req), PAGE_SIZE) / PAGE_SIZE);
+  blk_req = (struct virtio_blk_req *) blk_req_paddr;
+}
+
+void virtq_kick(struct virtio_virtq *vq, int desc_index) {
+  vq->avail.ring[vq->avail.index % VIRTQ_ENTRY_NUM] = desc_index;
+  vq->avail.index++;
+  __sync_synchronize();
+  virtio_reg_write32(VIRTIO_REG_QUEUE_NOTIFY, vq->queue_index);
+  vq->last_used_index++;
+}
+
+bool virtq_is_busy(struct virtio_virtq *vq) {
+  return vq->last_used_index != *vq->used_index;
+}
+
 // user mode
 extern char _binary_shell_bin_start[], _binary_shell_bin_size[];
 __attribute__((naked))
@@ -252,6 +343,8 @@ struct process *create_process(const void *image, size_t image_size) {
   for (paddr_t paddr = (paddr_t) __kernel_base; paddr < (paddr_t) __free_ram_end; paddr += PAGE_SIZE) {
     map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
   }
+
+  map_page(page_table, VIRTIO_BLK_PADDR, VIRTIO_BLK_PADDR, PAGE_R | PAGE_W);
 
   for (uint32_t off = 0; off < image_size; off += PAGE_SIZE) {
     paddr_t page = alloc_pages(1);
@@ -349,38 +442,11 @@ void handle_trap(struct trap_frame *f) {
   WRITE_CSR(sepc, user_pc);
 }
 
-
-struct process *proc_a;
-struct process *proc_b;
-
-void proc_a_entry(void) {
-    printf("starting process A\n");
-    while (1) {
-      putchar('A');
-      yield();
-
-      for (int i = 0; i < 30000000; i++){
-        __asm__ __volatile__("nop");
-      }
-    }
-}
-
-void proc_b_entry(void) {
-  printf("starting process B\n");
-  while (1) {
-      putchar('B');
-      yield();
-
-      for (int i = 0; i < 30000000; i++){
-        __asm__ __volatile__("nop");
-      }
-  }
-}
-
 void kernel_main(void) {
   memset(__bss, 0, (size_t) __bss_end - (size_t) __bss);
   
   WRITE_CSR(stvec, (uint32_t) kernel_entry);
+  virtio_blk_init();
 
   idle_proc = create_process(NULL, 0);
   idle_proc->pid = -1;
