@@ -223,7 +223,7 @@ struct virtio_virtq *virtq_init(unsigned index) {
   virtio_reg_write32(VIRTIO_REG_QUEUE_SEL, index);
   // checks the queue is not already in use
   uint32_t vq_pfn = virtio_reg_read32(VIRTIO_REG_QUEUE_PFN);
-  if (vq_pfn == 0) {
+  if (vq_pfn != 0) {
     PANIC("virtio: invalid queue pfn");
   }
   // read max queue size
@@ -288,6 +288,42 @@ void virtq_kick(struct virtio_virtq *vq, int desc_index) {
 
 bool virtq_is_busy(struct virtio_virtq *vq) {
   return vq->last_used_index != *vq->used_index;
+}
+
+void read_write_disk(void *buf, unsigned sector, int is_write) {
+  if (sector >= blk_capacity / SECTOR_SIZE) {
+    PANIC("virtio-blk: out of capacity %d", sector);
+  }
+  blk_req->sector = sector;
+  blk_req->type = is_write ? VIRTIO_BLK_T_OUT : VIRTIO_BLK_T_IN;
+  if (is_write) {
+    memcpy(blk_req->data, buf, SECTOR_SIZE);
+  }
+  struct virtio_virtq *vq = blk_request_vq;
+  vq->descs[0].addr = blk_req_paddr;
+  vq->descs[0].len = sizeof(uint32_t) * 2 + sizeof(uint64_t);
+  vq->descs[0].flags = VIRTQ_DESC_F_NEXT;
+  vq->descs[0].next = 1;
+
+  vq->descs[1].addr = blk_req_paddr + offsetof(struct virtio_blk_req, data);
+  vq->descs[1].len = SECTOR_SIZE;
+  vq->descs[1].flags = VIRTQ_DESC_F_NEXT | (is_write ? 0 : VIRTQ_DESC_F_WRITE);
+  vq->descs[1].next = 2;
+
+  vq->descs[2].addr = blk_req_paddr + offsetof(struct virtio_blk_req, status);
+  vq->descs[2].len = sizeof(uint8_t);
+  vq->descs[2].flags = VIRTQ_DESC_F_WRITE;
+
+  virtq_kick(vq, 0);
+  while (virtq_is_busy(vq)) {
+    ;
+  }
+  if (blk_req->status != 0) {
+    PANIC("virtio-blk: failed to %s sector %d", is_write ? "write" : "read", sector);
+  }
+  if (!is_write) {
+    memcpy(buf, blk_req->data, SECTOR_SIZE);
+  }
 }
 
 // user mode
@@ -447,6 +483,12 @@ void kernel_main(void) {
   
   WRITE_CSR(stvec, (uint32_t) kernel_entry);
   virtio_blk_init();
+
+  char buf[SECTOR_SIZE];
+  read_write_disk(buf, 0, false);
+  printf("sector 0: %s\n", buf);
+  strcpy(buf, "hello world\n");
+  read_write_disk(buf, 0, true);
 
   idle_proc = create_process(NULL, 0);
   idle_proc->pid = -1;
