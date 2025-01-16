@@ -241,6 +241,50 @@ struct virtio_virtq *virtq_init(unsigned index) {
   return vq;
 }
 
+struct virtio_net_curr current_virtio_net;
+
+void virtio_net_init(void) {
+  // step 1: Verify device magic value, version, and device ID
+  if (virtio_reg_read32(VIRTIO_REG_MAGIC) != 0x74726976) {
+      PANIC("virtio-net: invalid magic value");
+  }
+  if (virtio_reg_read32(VIRTIO_REG_VERSION) != 1) {
+      PANIC("virtio-net: invalid version");
+  }
+  if (virtio_reg_read32(VIRTIO_REG_DEVICE_ID) != VIRTIO_DEVICE_NET) {
+      PANIC("virtio-net: invalid device id");
+  }
+
+  // Step 2: Reset the device
+  virtio_reg_write32(VIRTIO_REG_DEVICE_STATUS, 0);
+
+  // Step 3: Acknowledge and initialize
+  virtio_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_ACK);
+  virtio_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER);
+
+  // uint32_t host_features = virtio_reg_read32(VIRTIO_REG_DEVICE_FEATURES);
+  // uint32_t guest_features = 0;
+
+  // // Negotiate features (e.g., MAC address support)
+  // if (host_features & (1 << VIRTIO_NET_F_MAC)) {
+  //     guest_features |= (1 << VIRTIO_NET_F_MAC);
+  // }
+  // virtio_reg_write32(VIRTIO_REG_DRIVER_FEATURES, guest_features)
+  virtio_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_FEAT_OK);
+  if (!(virtio_reg_read32(VIRTIO_REG_DEVICE_STATUS) & VIRTIO_STATUS_FEAT_OK)) {
+    PANIC("virtio-net: feature negotiation failed");
+  }
+  struct virtio_virtq *rx_queue = virtq_init(0);
+  struct virtio_virtq *tx_queue = virtq_init(1);
+
+  current_virtio_net.rx_vq = rx_queue;
+  current_virtio_net.tx_vq = tx_queue;
+
+  virtio_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER_OK);
+
+  printf("virtio-net: initialized");
+}
+
 struct virtio_virtq *blk_request_vq;
 struct virtio_blk_req *blk_req;
 paddr_t blk_req_paddr;

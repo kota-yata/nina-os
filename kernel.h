@@ -89,7 +89,8 @@ struct process {
 
 // virtio
 #define SECTOR_SIZE 512
-#define VIRTQ_ENTRY_NUM 16
+#define VIRTQ_ENTRY_NUM 16 // size of virtq descriptor
+#define VIRTIO_DEVICE_NET 1
 #define VIRTIO_DEVICE_BLK 2
 #define VIRTIO_BLK_PADDR 0x10001000
 #define VIRTIO_REG_MAGIC 0x00
@@ -114,11 +115,12 @@ struct process {
 #define VIRTIO_BLK_T_IN  0
 #define VIRTIO_BLK_T_OUT 1
 
+// descriptor
 struct virtq_desc {
-  uint64_t addr;
-  uint32_t len;
-  uint16_t flags;
-  uint16_t next;
+  uint64_t addr; // guest physical address
+  uint32_t len; // data length
+  uint16_t flags; // 0x1: is next, 0x2: is write only, 0x4: is indirect
+  uint16_t next; // next descriptor index
 } __attribute__((packed));
 
 struct virtq_avail {
@@ -153,4 +155,23 @@ struct virtio_blk_req {
     uint64_t sector;
     uint8_t data[512];
     uint8_t status;
+} __attribute__((packed));
+
+struct virtio_net_curr {
+  struct virtio_virtq *rx_vq;
+  struct virtio_virtq *tx_vq;
+} __attribute__((packed));
+
+struct virtio_net_hdr {
+  uint8_t flags;
+  uint8_t gso_type;
+  uint16_t hdr_len;
+  uint16_t gso_size;
+  uint16_t csum_start;
+  uint16_t csum_offset;
+} __attribute__((packed));
+
+struct virtio_net_ctrl_hdr {
+  uint8_t class;
+  uint8_t cmd;
 } __attribute__((packed));
