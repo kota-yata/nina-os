@@ -282,6 +282,7 @@ struct process *idle_proc;
 // process scheduler
 void yield(void) {
   struct process *next = idle_proc;
+  virtio_net_interrupt_handler();
   // find executable process
   for (int i = 0; i < PROCS_MAX; i++) {
     struct process *proc = &procs[(current_proc->pid + i) % PROCS_MAX];
@@ -391,13 +392,12 @@ void kernel_main(void) {
   idle_proc = create_process(NULL, 0);
   idle_proc->pid = -1;
   current_proc = idle_proc;
-  for(;;);
 
   // create_process(_binary_shell_bin_start, (size_t) _binary_shell_bin_size);
 
-  yield();
-
-  PANIC("switched to idle process");
+  while (1) {
+    yield();
+  }
 }
 
 __attribute__((section(".text.boot"))) // place this function in .text.boot section

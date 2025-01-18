@@ -83,7 +83,7 @@ struct process {
   } while (0)
 
 #define PANIC(fmt, ...)                                                        \
-    do {                                                                       \
-        printf("PANIC: %s:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__);  \
-        while (1) {}                                                           \
-    } while (0) // only a single loop. this is for executing multiple-line macros
+  do {                                                                       \
+    printf("PANIC: %s:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__);  \
+    while (1) {}                                                           \
+  } while (0) // only a single loop. this is for executing multiple-line macros
