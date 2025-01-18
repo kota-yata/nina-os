@@ -92,3 +92,4 @@ struct virtio_net_ctrl_hdr {
 
 void virtio_net_init(void);
 void debug_virtio_net(void);
+void virtio_net_interrupt_handler(void);

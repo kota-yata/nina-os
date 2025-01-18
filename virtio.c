@@ -2,20 +2,6 @@
 #include "kernel.h"
 #include "common.h"
 
-// virtio
-// uint32_t virtio_blk_reg_read32(unsigned offset) {
-//   return *((volatile uint32_t *) (VIRTIO_BLK_PADDR + offset));
-// }
-// uint64_t virtio_blk_reg_read64(unsigned offset) {
-//   return *((volatile uint64_t *) (VIRTIO_BLK_PADDR + offset));
-// }
-// void virtio_blk_reg_write32(unsigned offset, uint32_t value) {
-//   *((volatile uint32_t *) (VIRTIO_BLK_PADDR + offset)) = value;
-// }
-// void virtio_blk_reg_fetch_and_or32(unsigned offset, uint32_t value) {
-//   virtio_blk_reg_write32(offset, virtio_blk_reg_read32(offset) | value);
-// }
-
 uint32_t virtio_net_reg_read32(unsigned offset) {
     return *((volatile uint32_t *)(VIRTIO_NET_PADDR + offset));
 }
@@ -115,47 +101,26 @@ void virtio_net_init(void) {
   if (!(virtio_net_reg_read32(VIRTIO_REG_DEVICE_STATUS) & VIRTIO_STATUS_FEAT_OK)) {
     PANIC("virtio-net: feature negotiation failed");
   }
+
+  // read MAC address from the device configuration space
+  uint8_t mac[6];
+  for (int i = 0; i < 6; i++) {
+    mac[i] = *((volatile uint8_t *)(VIRTIO_NET_PADDR + VIRTIO_REG_DEVICE_CONFIG + i));
+  }
+  printf("virtio-net: MAC address: %02x:%02x:%02x:%02x:%02x:%02x\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
   virtio_net_qconfigure();
 
   virtio_net_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER_OK);
 }
 
-struct virtio_virtq *blk_request_vq;
-struct virtio_blk_req *blk_req;
-paddr_t blk_req_paddr;
-unsigned blk_capacity;
-
-// void virtio_blk_init(void) {
-//   if (virtio_blk_reg_read32(VIRTIO_REG_MAGIC) != 0x74726976)
-//     PANIC("virtio: invalid magic value");
-//   if (virtio_blk_reg_read32(VIRTIO_REG_VERSION) != 1)
-//     PANIC("virtio: invalid version");
-//   if (virtio_blk_reg_read32(VIRTIO_REG_DEVICE_ID) != VIRTIO_DEVICE_BLK)
-//     PANIC("virtio: invalid device id");
-  
-//   // reset the device
-//   virtio_blk_reg_write32(VIRTIO_REG_DEVICE_STATUS, 0);
-//   // set the ACKNOWLEDGE status bit
-//   virtio_blk_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_ACK);
-//   // set the DRIVER status bit
-//   virtio_blk_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER);
-//   // omitting step 4 at this point
-//   // set the FEATURES_OK status bit
-//   virtio_blk_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_FEAT_OK);
-//   // omitting step 6, which checks the device status bit to ensure the FEATURES_OK bit is still set
-//   // perform driver-specific setup
-//   blk_request_vq = virtq_init(0);
-//   // set the DRIVER_OK status bit
-//   virtio_blk_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER_OK);
-
-//   // get the capacity of the block device
-//   blk_capacity = virtio_blk_reg_read64(VIRTIO_REG_DEVICE_CONFIG + 0) * SECTOR_SIZE;
-//   printf("virtio-blk: capacity=%d bytes\n", blk_capacity);
-
-//   // allocate a page for the request (1 virtio_blk_req)
-//   blk_req_paddr = alloc_pages(align_up(sizeof(*blk_req), PAGE_SIZE) / PAGE_SIZE);
-//   blk_req = (struct virtio_blk_req *) blk_req_paddr;
-// }
+void virtio_net_interrupt_handler(void) {
+  while(*current_virtio_net.rx_vq->used_index != current_virtio_net.rx_vq->last_used_index) {
+    printf("virtio-net: packet received\n");
+    // uint16_t desc_index = current_virtio_net.rx_vq->used.ring[current_virtio_net.rx_vq->last_used_index % VIRTQ_ENTRY_NUM].id;
+    // struct virtq_desc *desc = &current_virtio_net.rx_vq->descs[desc_index];
+  }
+}
 
 // notification to the host driver
 void virtq_kick(struct virtio_virtq *vq, int desc_index) {
@@ -168,42 +133,6 @@ void virtq_kick(struct virtio_virtq *vq, int desc_index) {
 
 bool virtq_is_busy(struct virtio_virtq *vq) {
   return vq->last_used_index != *vq->used_index;
-}
-
-void read_write_disk(void *buf, unsigned sector, int is_write) {
-  if (sector >= blk_capacity / SECTOR_SIZE) {
-    PANIC("virtio-blk: out of capacity %d", sector);
-  }
-  blk_req->sector = sector;
-  blk_req->type = is_write ? VIRTIO_BLK_T_OUT : VIRTIO_BLK_T_IN;
-  if (is_write) {
-    memcpy(blk_req->data, buf, SECTOR_SIZE);
-  }
-  struct virtio_virtq *vq = blk_request_vq;
-  vq->descs[0].addr = blk_req_paddr;
-  vq->descs[0].len = sizeof(uint32_t) * 2 + sizeof(uint64_t);
-  vq->descs[0].flags = VIRTQ_DESC_F_NEXT;
-  vq->descs[0].next = 1;
-
-  vq->descs[1].addr = blk_req_paddr + offsetof(struct virtio_blk_req, data);
-  vq->descs[1].len = SECTOR_SIZE;
-  vq->descs[1].flags = VIRTQ_DESC_F_NEXT | (is_write ? 0 : VIRTQ_DESC_F_WRITE);
-  vq->descs[1].next = 2;
-
-  vq->descs[2].addr = blk_req_paddr + offsetof(struct virtio_blk_req, status);
-  vq->descs[2].len = sizeof(uint8_t);
-  vq->descs[2].flags = VIRTQ_DESC_F_WRITE;
-
-  virtq_kick(vq, 0);
-  while (virtq_is_busy(vq)) {
-    ;
-  }
-  if (blk_req->status != 0) {
-    PANIC("virtio-blk: failed to %s sector %d", is_write ? "write" : "read", sector);
-  }
-  if (!is_write) {
-    memcpy(buf, blk_req->data, SECTOR_SIZE);
-  }
 }
 
 void debug_virtio_net(void) {

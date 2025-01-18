@@ -343,11 +343,20 @@ void handle_trap(struct trap_frame *f) {
   uint32_t stval = READ_CSR(stval);
   uint32_t user_pc = READ_CSR(sepc);
 
+  // if ((scause & 0x80000000) && ((scause & 0xff) == 9)) { 
+  //   // External interrupt from VirtIO device
+  //   virtio_net_interrupt_handler();
+  //   return;
+  // }
+
   if (scause == SCAUSE_ECALL) {
     handle_syscall(f);
     user_pc += 4;
+  } else if (scause == SCAUSE_SEI) {
+    virtio_net_interrupt_handler();
+    return;
   } else {
-    PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
+    printf("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
   }
 
   WRITE_CSR(sepc, user_pc);
@@ -357,6 +366,7 @@ void kernel_main(void) {
   memset(__bss, 0, (size_t) __bss_end - (size_t) __bss);
   
   WRITE_CSR(stvec, (uint32_t) kernel_entry);
+  // WRITE_CSR(mideleg, 0xffff); 
   // virtio_blk_init();
 
   // char buf[SECTOR_SIZE];
@@ -370,11 +380,20 @@ void kernel_main(void) {
   printf("virtio-net initialized\n");
   debug_virtio_net();
 
+  // enable interrupts
+  // uint32_t sstatus = READ_CSR(sstatus);
+  // sstatus |= (1 << 1); // Set SIE (Supervisor Interrupt Enable)
+  // WRITE_CSR(sstatus, sstatus);
+  // uint32_t sie = READ_CSR(sie);
+  // sie |= (1 << 9); // Set SEIE (Supervisor External Interrupt Enable)
+  // WRITE_CSR(sie, sie);
+
   idle_proc = create_process(NULL, 0);
   idle_proc->pid = -1;
   current_proc = idle_proc;
+  for(;;);
 
-  create_process(_binary_shell_bin_start, (size_t) _binary_shell_bin_size);
+  // create_process(_binary_shell_bin_start, (size_t) _binary_shell_bin_size);
 
   yield();
 
