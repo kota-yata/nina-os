@@ -367,7 +367,7 @@ void kernel_main(void) {
   memset(__bss, 0, (size_t) __bss_end - (size_t) __bss);
   
   WRITE_CSR(stvec, (uint32_t) kernel_entry);
-  // WRITE_CSR(mideleg, 0xffff); 
+  // WRITE_CSR(mideleg, MIDELEG_MEIE | MIDELEG_MTIE | MIDELEG_MSIE); 
   // virtio_blk_init();
 
   // char buf[SECTOR_SIZE];

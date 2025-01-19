@@ -69,6 +69,10 @@ struct process {
 #define SCAUSE_ECALL 8
 #define SCAUSE_SEI 9
 
+#define MIDELEG_MEIE (1 << 11)
+#define MIDELEG_MTIE (1 << 7)
+#define MIDELEG_MSIE (1 << 3)
+
 #define READ_CSR(reg)                                                      \
   ({                                                                       \
     unsigned long __tmp;                                                   \
