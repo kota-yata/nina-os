@@ -282,7 +282,7 @@ struct process *idle_proc;
 // process scheduler
 void yield(void) {
   struct process *next = idle_proc;
-  virtio_net_interrupt_handler();
+  virtio_net_handler();
   // find executable process
   for (int i = 0; i < PROCS_MAX; i++) {
     struct process *proc = &procs[(current_proc->pid + i) % PROCS_MAX];
@@ -346,7 +346,7 @@ void handle_trap(struct trap_frame *f) {
 
   // if ((scause & 0x80000000) && ((scause & 0xff) == 9)) { 
   //   // External interrupt from VirtIO device
-  //   virtio_net_interrupt_handler();
+  //   virtio_net_handler();
   //   return;
   // }
 
@@ -354,7 +354,7 @@ void handle_trap(struct trap_frame *f) {
     handle_syscall(f);
     user_pc += 4;
   } else if (scause == SCAUSE_SEI) {
-    virtio_net_interrupt_handler();
+    virtio_net_handler();
     return;
   } else {
     printf("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
@@ -367,7 +367,6 @@ void kernel_main(void) {
   memset(__bss, 0, (size_t) __bss_end - (size_t) __bss);
   
   WRITE_CSR(stvec, (uint32_t) kernel_entry);
-  // WRITE_CSR(mideleg, MIDELEG_MEIE | MIDELEG_MTIE | MIDELEG_MSIE); 
   // virtio_blk_init();
 
   // char buf[SECTOR_SIZE];

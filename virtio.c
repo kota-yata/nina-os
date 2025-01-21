@@ -89,14 +89,13 @@ void virtio_net_init(void) {
   virtio_net_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_ACK);
   virtio_net_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER);
 
-  // uint32_t host_features = virtio_blk_reg_read32(VIRTIO_REG_DEVICE_FEATURES);
-  // uint32_t guest_features = 0;
-
+  uint32_t host_features = virtio_net_reg_read32(VIRTIO_REG_DEVICE_FEATURES);
+  uint32_t guest_features = 0;
+  printf("virtio-net: host features: %x\n", host_features);
   // // Negotiate features (e.g., MAC address support)
-  // if (host_features & (1 << VIRTIO_NET_F_MAC)) {
-  //     guest_features |= (1 << VIRTIO_NET_F_MAC);
-  // }
-  // virtio_blk_reg_write32(VIRTIO_REG_DRIVER_FEATURES, guest_features)
+  guest_features |= VIRTIO_NET_F_CSUM;
+  guest_features |= VIRTIO_NET_F_MAC;
+  virtio_net_reg_write32(VIRTIO_REG_DRIVER_FEATURES, guest_features);
   virtio_net_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_FEAT_OK);
   if (!(virtio_net_reg_read32(VIRTIO_REG_DEVICE_STATUS) & VIRTIO_STATUS_FEAT_OK)) {
     PANIC("virtio-net: feature negotiation failed");
@@ -114,7 +113,7 @@ void virtio_net_init(void) {
   virtio_net_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER_OK);
 }
 
-void virtio_net_interrupt_handler(void) {
+void virtio_net_handler(void) {
   while(*current_virtio_net.rx_vq->used_index != current_virtio_net.rx_vq->last_used_index) {
     printf("virtio-net: packet received\n");
     // uint16_t desc_index = current_virtio_net.rx_vq->used.ring[current_virtio_net.rx_vq->last_used_index % VIRTQ_ENTRY_NUM].id;
@@ -144,9 +143,9 @@ void debug_virtio_net(void) {
     if (current_virtio_net.rx_vq->descs[i].addr == 0 || current_virtio_net.rx_vq->descs[i].len == 0) {
       PANIC("virtio-net: rx_vq[%d] not configured properly", i);
     }
-    printf("virtio-net: rx_vq[%d] addr=%x, len=%d\n", i, current_virtio_net.rx_vq->descs[i].addr, current_virtio_net.rx_vq->descs[i].len);
+    // printf("virtio-net: rx_vq[%d] addr=%x, len=%d\n", i, current_virtio_net.rx_vq->descs[i].addr, current_virtio_net.rx_vq->descs[i].len);
   }
-  for (int i = 0; i < VIRTQ_ENTRY_NUM; i++) {
-    printf("virtio-net: tx_vq[%d] addr=%x, len=%d\n", i, current_virtio_net.tx_vq->descs[i].addr, current_virtio_net.tx_vq->descs[i].len);
-  }
+  // for (int i = 0; i < VIRTQ_ENTRY_NUM; i++) {
+    // printf("virtio-net: tx_vq[%d] addr=%x, len=%d\n", i, current_virtio_net.tx_vq->descs[i].addr, current_virtio_net.tx_vq->descs[i].len);
+  // }
 }

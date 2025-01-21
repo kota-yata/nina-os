@@ -6,10 +6,11 @@
 #define VIRTQ_ENTRY_NUM 16 // size of virtq descriptor
 #define VIRTIO_DEVICE_NET 1
 #define VIRTIO_DEVICE_BLK 2
-#define VIRTIO_NET_PADDR 0x10001000
 #define VIRTIO_REG_MAGIC 0x00
 #define VIRTIO_REG_VERSION       0x04
 #define VIRTIO_REG_DEVICE_ID     0x08
+#define VIRTIO_REG_DEVICE_FEATURES 0x10
+#define VIRTIO_REG_DRIVER_FEATURES 0x20
 #define VIRTIO_REG_QUEUE_SEL     0x30
 #define VIRTIO_REG_QUEUE_NUM_MAX 0x34
 #define VIRTIO_REG_QUEUE_NUM     0x38
@@ -28,6 +29,9 @@
 #define VIRTQ_AVAIL_F_NO_INTERRUPT 1
 #define VIRTIO_BLK_T_IN  0
 #define VIRTIO_BLK_T_OUT 1
+#define VIRTIO_NET_PADDR 0x10001000
+#define VIRTIO_NET_F_MAC (1 << 5)
+#define VIRTIO_NET_F_CSUM (1 << 0)
 
 // descriptor
 struct virtq_desc {
@@ -92,4 +96,4 @@ struct virtio_net_ctrl_hdr {
 
 void virtio_net_init(void);
 void debug_virtio_net(void);
-void virtio_net_interrupt_handler(void);
+void virtio_net_handler(void);
