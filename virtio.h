@@ -11,6 +11,7 @@
 #define VIRTIO_REG_DEVICE_ID     0x08
 #define VIRTIO_REG_DEVICE_FEATURES 0x10
 #define VIRTIO_REG_DRIVER_FEATURES 0x20
+#define VIRTIO_REG_GUEST_PAGE_SIZE 0x28
 #define VIRTIO_REG_QUEUE_SEL     0x30
 #define VIRTIO_REG_QUEUE_NUM_MAX 0x34
 #define VIRTIO_REG_QUEUE_NUM     0x38
@@ -73,11 +74,6 @@ struct virtio_blk_req {
     uint64_t sector;
     uint8_t data[512];
     uint8_t status;
-} __attribute__((packed));
-
-struct virtio_net_curr {
-  struct virtio_virtq *rx_vq;
-  struct virtio_virtq *tx_vq;
 } __attribute__((packed));
 
 struct virtio_net_hdr {
