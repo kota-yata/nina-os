@@ -1,6 +1,7 @@
 #include "kernel.h"
 #include "virtio.h"
 #include "common.h"
+#include "ping.h"
 
 typedef unsigned char uint8_t;
 typedef unsigned int uint32_t;
@@ -379,6 +380,8 @@ void kernel_main(void) {
   virtio_net_init();
   printf("virtio-net initialized\n");
   debug_virtio_net();
+
+  send_icmp_echo_request();
 
   // enable interrupts
   // uint32_t sstatus = READ_CSR(sstatus);

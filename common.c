@@ -95,3 +95,32 @@ void printf(const char *fmt, ...) {
 end:
   va_end(vargs);
 }
+
+uint16_t htons(uint16_t hostshort) {
+  uint16_t test = 1;
+  uint8_t *byte = (uint8_t *)&test;
+  if (*byte == 1) {
+      return (hostshort >> 8) | (hostshort << 8);
+  }
+  return hostshort;
+}
+
+uint32_t htonl(uint32_t hostlong) {
+  uint16_t test = 1;
+  uint8_t *byte = (uint8_t *)&test;
+  if (*byte == 1) {
+    return ((hostlong >> 24) & 0x000000FF) | // 最上位バイトを最下位に
+            ((hostlong >> 8) & 0x0000FF00) | // 上位2バイトを中間に
+            ((hostlong << 8) & 0x00FF0000) | // 下位2バイトを中間に
+            ((hostlong << 24) & 0xFF000000); // 最下位バイトを最上位に
+  }
+  return hostlong;
+}
+
+size_t strlen(const char *str) {
+  const char *s = str;
+  while (*s) {
+      s++;
+  }
+  return s - str;
+}

@@ -57,7 +57,7 @@ $SRC_QEMU_PATH \
   -monitor unix:$SRC_MONITOR_SOCKET,server,nowait \
   -netdev bridge,id=net0,br=$SRC_BRIDGE,helper=$SRC_BRIDGE_HELPER \
   -device virtio-net-device,netdev=net0,mac=$VM_MAC_ADDR \
-  -object filter-dump,id=f1,netdev=net0,file=virtio-net.pcap\
+  -object filter-dump,id=f1,netdev=net0,file=virtio-net-u24.pcap\
 
 # -drive file=$VM_IMG,format=raw,if=virtio \
   # -drive file=$VM_USERDATA,format=raw \

@@ -1,6 +1,8 @@
 #pragma once
 #include "common.h"
 
+paddr_t alloc_pages(uint32_t n);
+
 // return value of sbi_call
 struct sbiret {
   long error;

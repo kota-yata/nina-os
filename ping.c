@@ -1,79 +1,72 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <netinet/ip.h>
-#include <netinet/ip_icmp.h>
-#include <sys/socket.h>
-#include <sys/types.h>
+#include "virtio.h"
+#include "ping.h"
 
-// Compute checksum for IP/ICMP headers
-unsigned short checksum(void *b, int len) {
-    unsigned short *buf = b;
-    unsigned int sum = 0;
-    unsigned short result;
+#define MY_IP_ADDRESS      0xC0A80064 // 192.168.0.100
+#define DEST_IP_ADDRESS    0xC0A80001 // 192.168.0.1
 
-    for (sum = 0; len > 1; len -= 2)
-        sum += *buf++;
-    if (len == 1)
-        sum += *(unsigned char *)buf;
-    sum = (sum >> 16) + (sum & 0xFFFF);
-    sum += (sum >> 16);
-    result = ~sum;
-    return result;
+uint16_t calculate_checksum(void *data, int len) {
+  uint32_t sum = 0;
+  uint16_t *ptr = (uint16_t *)data;
+
+  for (int i = 0; i < len / 2; i++) {
+    sum += ptr[i];
+    if (sum > 0xFFFF) {
+      sum -= 0xFFFF;
+    }
+  }
+
+  if (len % 2 == 1) {
+    sum += *((uint8_t *)data + len - 1);
+    if (sum > 0xFFFF) {
+      sum -= 0xFFFF;
+    }
+  }
+
+  return ~sum;
 }
 
-int main() {
-    int sockfd;
-    char buffer[65536];
-    struct sockaddr_in addr;
 
-    // Create raw socket
-    sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-    if (sockfd < 0) {
-        perror("Socket creation failed");
-        exit(EXIT_FAILURE);
-    }
+// ICMPパケット送信関数
+void send_icmp_echo_request() {
+  printf("Sending ICMP Echo Request to 192.168.0.1...\n");
 
-    while (1) {
-        socklen_t addr_len = sizeof(addr);
-        ssize_t n = recvfrom(sockfd, buffer, sizeof(buffer), 0,
-                             (struct sockaddr *)&addr, &addr_len);
-        if (n < 0) {
-            perror("Failed to receive packet");
-            continue;
-        }
+  // パケットバッファ（IPヘッダ + ICMPヘッダ + データ）
+  uint8_t packet[64];
+  
+  struct ipv4_header *ip_hdr = (struct ipv4_header *)packet;
+  struct icmp_header *icmp_hdr = (struct icmp_header *)(packet + sizeof(struct ipv4_header));
 
-        struct iphdr *ip_header = (struct iphdr *)buffer;
-        struct icmphdr *icmp_header =
-            (struct icmphdr *)(buffer + (ip_header->ihl * 4));
+  // IPヘッダ設定
+  ip_hdr->version_ihl = (4 << 4) | (sizeof(struct ipv4_header) / 4); // IPv4, ヘッダ長=20バイト
+  ip_hdr->type_of_service = 0;
+  ip_hdr->total_length = htons(sizeof(packet)); // 全体の長さ（IP + ICMP）
+  ip_hdr->identification = htons(1);
+  ip_hdr->flags_fragment_offset = htons(0);
+  ip_hdr->ttl = 64;
+  ip_hdr->protocol = 1; // ICMPプロトコル番号
+  ip_hdr->header_checksum = 0;
+  ip_hdr->src_ip = htonl(MY_IP_ADDRESS);
+  ip_hdr->dst_ip = htonl(DEST_IP_ADDRESS);
 
-        // Check if it's an ICMP echo request
-        if (icmp_header->type == ICMP_ECHO) {
-            printf("Received ICMP Echo Request\n");
+  // IPヘッダチェックサム計算
+  ip_hdr->header_checksum = calculate_checksum(ip_hdr, sizeof(struct ipv4_header));
 
-            // Modify ICMP header for Echo Reply
-            icmp_header->type = ICMP_ECHOREPLY;
-            icmp_header->checksum = 0;
-            icmp_header->checksum =
-                checksum(icmp_header, n - (ip_header->ihl * 4));
+  // ICMPヘッダ設定
+  icmp_hdr->type = 8;
+  icmp_hdr->code = 0;
+  icmp_hdr->checksum = 0;
+  icmp_hdr->identifier = htons(12345);
+  icmp_hdr->sequence = htons(1);
 
-            // Swap source and destination IP addresses
-            struct in_addr temp = *(struct in_addr *)&ip_header->saddr;
-            ip_header->saddr = ip_header->daddr;
-            ip_header->daddr = *(uint32_t *)&temp;
+  // データ部分（任意のペイロード）
+  char *data = (char *)(packet + sizeof(struct ipv4_header) + sizeof(struct icmp_header));
+  strcpy(data, "PING TEST");
 
-            // Send reply
-            if (sendto(sockfd, buffer, n, 0, (struct sockaddr *)&addr,
-                       addr_len) < 0) {
-                perror("Failed to send packet");
-            } else {
-                printf("Sent ICMP Echo Reply\n");
-            }
-        }
-    }
+  // ICMPチェックサム計算（ヘッダ + データ部分）
+  icmp_hdr->checksum = calculate_checksum(icmp_hdr, sizeof(struct icmp_header) + strlen(data));
 
-    close(sockfd);
-    return 0;
+  // Virtio-net経由で送信
+  virtio_net_transmit(packet, sizeof(packet));
+
+  printf("ICMP Echo Request sent successfully\n");
 }

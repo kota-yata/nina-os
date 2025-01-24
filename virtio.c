@@ -13,6 +13,8 @@ void virtio_net_reg_fetch_and_or32(unsigned offset, uint32_t value) {
 }
 
 struct virtio_virtq *virtq_init(unsigned index) {
+  // size_t virtq_size = align_up((16 * VIRTQ_ENTRY_NUM) + (6 + 2 * VIRTQ_ENTRY_NUM) + (6 + 8 * VIRTQ_ENTRY_NUM), PAGE_SIZE);
+  // paddr_t virtq_paddr = alloc_pages(virtq_size / PAGE_SIZE);
   paddr_t virtq_paddr = alloc_pages(align_up(sizeof(struct virtio_virtq), PAGE_SIZE) / PAGE_SIZE);
   struct virtio_virtq *vq = (struct virtio_virtq *) virtq_paddr;
   // memset(vq, 0, sizeof(struct virtio_virtq));
@@ -34,38 +36,10 @@ struct virtio_virtq *virtq_init(unsigned index) {
   // notify the device about the queue size
   virtio_net_reg_write32(VIRTIO_REG_QUEUE_NUM, VIRTQ_ENTRY_NUM);
   // notify the device about the used alignment
-  virtio_net_reg_write32(VIRTIO_REG_QUEUE_ALIGN, 0);
+  virtio_net_reg_write32(VIRTIO_REG_QUEUE_ALIGN, PAGE_SIZE);
   // write the physical number of the first page of the queue
-  virtio_net_reg_write32(VIRTIO_REG_QUEUE_PFN, virtq_paddr);
+  virtio_net_reg_write32(VIRTIO_REG_QUEUE_PFN, virtq_paddr / PAGE_SIZE);
   return vq;
-}
-
-struct virtio_virtq *rx_vq;
-struct virtio_virtq *tx_vq;
-
-void virtio_net_qconfigure(void) {
-  rx_vq = virtq_init(0);
-  for (int i = 0; i < VIRTQ_ENTRY_NUM; i++) {
-    paddr_t buf_paddr = alloc_pages(1);
-    rx_vq->descs[i].addr = buf_paddr;
-    rx_vq->descs[i].len = PAGE_SIZE;
-    rx_vq->descs[i].flags = VIRTQ_DESC_F_WRITE;
-    rx_vq->descs[i].next = (i + 1) % VIRTQ_ENTRY_NUM;
-  }
-  rx_vq->avail.index = 0;
-  rx_vq->used_index = (volatile uint16_t *)&rx_vq->used.index;
-  // init tx_vq
-  tx_vq = virtq_init(1);
-  for (int i = 0; i < VIRTQ_ENTRY_NUM; i++) {
-    paddr_t buf_paddr = alloc_pages(1);
-    // following fields will be populated during the actual transmission
-    tx_vq->descs[i].addr = 0;
-    tx_vq->descs[i].len = 0;
-    tx_vq->descs[i].flags = 0;
-    tx_vq->descs[i].next = (i + 1) % VIRTQ_ENTRY_NUM;
-  }
-  tx_vq->avail.index = 0;
-  tx_vq->used_index = (volatile uint16_t *)&tx_vq->used.index;
 }
 
 // notification to the host driver
@@ -75,6 +49,38 @@ void virtq_kick(struct virtio_virtq *vq, int desc_index) {
   __sync_synchronize();
   virtio_net_reg_write32(VIRTIO_REG_QUEUE_NOTIFY, vq->queue_index);
   vq->last_used_index++;
+}
+
+struct virtio_virtq *rx_vq;
+struct virtio_virtq *tx_vq;
+
+void virtio_net_qconfigure(void) {
+  rx_vq = virtq_init(0);
+  printf("virtio-net: descriptor size=%d\n", sizeof(struct virtq_desc));
+  printf("virtio-net: avail size=%d\n", sizeof(struct virtq_avail));
+  printf("virtio-net: used size=%d\n", sizeof(struct virtq_used));
+  for (int i = 0; i < VIRTQ_ENTRY_NUM; i++) {
+    paddr_t buf_paddr = alloc_pages(1);
+    rx_vq->descs[i].addr = buf_paddr;
+    rx_vq->descs[i].len = PAGE_SIZE;
+    rx_vq->descs[i].flags = VIRTQ_DESC_F_WRITE;
+    rx_vq->descs[i].next = (i + 1) % VIRTQ_ENTRY_NUM;
+  }
+  rx_vq->avail.index = 0;
+  rx_vq->used_index = (volatile uint16_t *)&rx_vq->used.index;
+  rx_vq->last_used_index = 0;
+  // init tx_vq
+  tx_vq = virtq_init(1);
+  // for (int i = 0; i < VIRTQ_ENTRY_NUM; i++) {
+  //   paddr_t buf_paddr = alloc_pages(1);
+  //   // following fields will be populated during the actual transmission
+  //   tx_vq->descs[i].addr = 0;
+  //   tx_vq->descs[i].len = 0;
+  //   tx_vq->descs[i].flags = 0;
+  //   tx_vq->descs[i].next = (i + 1) % VIRTQ_ENTRY_NUM;
+  // }
+  tx_vq->avail.index = 0;
+  tx_vq->used_index = (volatile uint16_t *)&tx_vq->used.index;
 }
 
 void virtio_net_init(void) {
@@ -97,7 +103,6 @@ void virtio_net_init(void) {
   virtio_net_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_ACK);
   virtio_net_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER);
 
-  uint32_t host_features = virtio_net_reg_read32(VIRTIO_REG_DEVICE_FEATURES);
   uint32_t guest_features = 0;
   // // Negotiate features (e.g., MAC address support)
   guest_features |= VIRTIO_NET_F_CSUM;
@@ -108,7 +113,7 @@ void virtio_net_init(void) {
     PANIC("virtio-net: feature negotiation failed");
   }
   virtio_net_qconfigure();
-  virtio_net_reg_write32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER_OK);
+  virtio_net_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER_OK);
 
   // read MAC address from the device configuration space
   uint8_t mac[6];
@@ -119,11 +124,64 @@ void virtio_net_init(void) {
 }
 
 void virtio_net_handler(void) {
-  while(*rx_vq->used_index != rx_vq->last_used_index) {
-    printf("virtio-net: packet received\n");
-    // uint16_t desc_index = rx_vq->used.ring[rx_vq->last_used_index % VIRTQ_ENTRY_NUM].id;
-    // struct virtq_desc *desc = &rx_vq->descs[desc_index];
+  struct virtio_virtq *vq = rx_vq; // RXキュー
+  uint16_t last_used = vq->last_used_index;
+
+  // ホストが使用したディスクリプタを確認
+  while (last_used != *vq->used_index) {
+    // UsedリングからディスクリプタIDを取得
+    uint32_t desc_id = vq->used.ring[last_used % VIRTQ_ENTRY_NUM].id;
+
+    // ディスクリプタからデータを取得
+    struct virtio_net_hdr *hdr = (struct virtio_net_hdr *)(vq->descs[desc_id].addr);
+    void *packet_data = (void *)(vq->descs[desc_id].addr + sizeof(struct virtio_net_hdr));
+    uint32_t packet_len = vq->used.ring[last_used % VIRTQ_ENTRY_NUM].len - sizeof(struct virtio_net_hdr);
+
+    // 上位プロトコルスタックに渡す（ここではログ出力）
+    printf("Received packet: length=%d\n", packet_len);
+
+    // ディスクリプタを再利用可能な状態に戻す
+    vq->avail.ring[vq->avail.index % VIRTQ_ENTRY_NUM] = desc_id;
+    vq->avail.index++;
+    last_used++;
   }
+  vq->last_used_index = last_used;
+}
+
+void virtio_net_transmit(void *data, uint32_t len) {
+    struct virtio_virtq *vq = tx_vq; // TXキュー
+
+    // ディスクリプタIDを取得
+    uint16_t desc_id = vq->avail.index % VIRTQ_ENTRY_NUM;
+
+    paddr_t packet_paddr = alloc_pages(1);
+
+    // Virtio-netヘッダとパケットデータを準備
+    struct virtio_net_hdr *hdr = (struct virtio_net_hdr *)packet_paddr;
+    memset(hdr, 0, sizeof(struct virtio_net_hdr));
+
+    void *packet_data = (void *)(packet_paddr + sizeof(struct virtio_net_hdr));
+    memcpy(packet_data, data, len);
+
+    // ディスクリプタ設定
+    vq->descs[desc_id].addr = packet_paddr;
+    vq->descs[desc_id].len = sizeof(struct virtio_net_hdr) + len;
+    vq->descs[desc_id].flags = 0; // 次のディスクリプタなし
+
+    // Availリングにエントリ追加
+    vq->avail.ring[vq->avail.index % VIRTQ_ENTRY_NUM] = desc_id;
+    vq->avail.index++;
+
+    // デバイスに通知
+    __sync_synchronize(); // メモリバリア
+    virtio_net_reg_write32(VIRTIO_REG_QUEUE_NOTIFY, vq->queue_index);
+
+    // 処理完了まで待機（ポーリング方式）
+    while (vq->last_used_index == *vq->used_index)
+        ;
+
+    // Usedリングで完了確認
+    printf("Packet transmitted successfully\n");
 }
 
 bool virtq_is_busy(struct virtio_virtq *vq) {
@@ -146,9 +204,11 @@ void debug_virtio_net(void) {
       printf("virtio-net: Driver ready\n");
   }
   // check rx
+  printf("virtio-net: expected rx queue pfn=%x\n", rx_vq);
   virtio_net_reg_write32(VIRTIO_REG_QUEUE_SEL, 0);
-  printf("virtio-net: rx queue pfn=%x\n", virtio_net_reg_read32(VIRTIO_REG_QUEUE_PFN));
+  printf("virtio-net: actual rx queue pfn=%x\n", virtio_net_reg_read32(VIRTIO_REG_QUEUE_PFN));
   // check tx
+  printf("virtio-net: expected tx queue pfn=%x\n", tx_vq);
   virtio_net_reg_write32(VIRTIO_REG_QUEUE_SEL, 1);
-  printf("virtio-net: tx queue pfn=%x\n", virtio_net_reg_read32(VIRTIO_REG_QUEUE_PFN));
+  printf("virtio-net: actual tx queue pfn=%x\n", virtio_net_reg_read32(VIRTIO_REG_QUEUE_PFN));
 }

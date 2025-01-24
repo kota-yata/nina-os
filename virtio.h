@@ -3,7 +3,7 @@
 
 // virtio
 #define SECTOR_SIZE 512
-#define VIRTQ_ENTRY_NUM 16 // size of virtq descriptor
+#define VIRTQ_ENTRY_NUM 16
 #define VIRTIO_DEVICE_NET 1
 #define VIRTIO_DEVICE_BLK 2
 #define VIRTIO_REG_MAGIC 0x00
@@ -62,7 +62,7 @@ struct virtq_used {
 struct virtio_virtq {
     struct virtq_desc descs[VIRTQ_ENTRY_NUM];
     struct virtq_avail avail;
-    struct virtq_used used __attribute__((aligned(PAGE_SIZE)));
+    struct virtq_used used __attribute__((aligned(4096)));
     int queue_index;
     volatile uint16_t *used_index;
     uint16_t last_used_index;
