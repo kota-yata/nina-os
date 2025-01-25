@@ -1,72 +1,72 @@
 #include "virtio.h"
 #include "ping.h"
 
-#define MY_IP_ADDRESS      0xC0A80064 // 192.168.0.100
-#define DEST_IP_ADDRESS    0xC0A80001 // 192.168.0.1
-
-uint16_t calculate_checksum(void *data, int len) {
-  uint32_t sum = 0;
-  uint16_t *ptr = (uint16_t *)data;
-
-  for (int i = 0; i < len / 2; i++) {
-    sum += ptr[i];
-    if (sum > 0xFFFF) {
-      sum -= 0xFFFF;
+uint16_t calculate_checksum(uint16_t *header, int length) {
+    unsigned long sum = 0;
+    while (length > 1) {
+      sum += *header++;
+      length -= 2;
     }
-  }
-
-  if (len % 2 == 1) {
-    sum += *((uint8_t *)data + len - 1);
-    if (sum > 0xFFFF) {
-      sum -= 0xFFFF;
+    // in case of odd number of bytes
+    if (length == 1) {
+      sum += *(uint8_t *)header;
     }
-  }
-
-  return ~sum;
+    // add carry
+    while (sum >> 16) {
+      sum = (sum & 0xFFFF) + (sum >> 16);
+    }
+    return (uint16_t)(~sum);
 }
 
 
-// ICMPパケット送信関数
+const char payload[9] = "PING TEST";
+const uint32_t src_ip_address = 0xC0A86468; // 192.168.100.104
+const uint32_t dst_ip_address = 0xC0A86466; // 192.168.100.101
+const uint8_t src_mac_address[6] = {0x52, 0x54, 0x00, 0x12, 0x34, 0x56};
+// const uint8_t dst_mac_address[6] = {0x50, 0x6b, 0x4b, 0x08, 0x61, 0xde};
+const uint8_t dst_mac_address[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+
 void send_icmp_echo_request() {
-  printf("Sending ICMP Echo Request to 192.168.0.1...\n");
+  printf("Sending ICMP Echo Request to 192.168.100.1...\n");
 
-  // パケットバッファ（IPヘッダ + ICMPヘッダ + データ）
-  uint8_t packet[64];
+  // packet buffer
+  uint8_t packet[128];
   
-  struct ipv4_header *ip_hdr = (struct ipv4_header *)packet;
-  struct icmp_header *icmp_hdr = (struct icmp_header *)(packet + sizeof(struct ipv4_header));
+  struct ethernet_header *eth_hdr = (struct ethernet_header *)packet;
+  struct ipv4_header *ip_hdr = (struct ipv4_header *)(packet + sizeof(struct ethernet_header));
+  struct icmp_header *icmp_hdr = (struct icmp_header *)(packet + sizeof(struct ethernet_header) + sizeof(struct ipv4_header));
 
-  // IPヘッダ設定
-  ip_hdr->version_ihl = (4 << 4) | (sizeof(struct ipv4_header) / 4); // IPv4, ヘッダ長=20バイト
+  memcpy(eth_hdr->dst_mac, dst_mac_address, 6);
+  memcpy(eth_hdr->src_mac, src_mac_address, 6);
+  eth_hdr->type = htons(0x0800); // IPv4
+
+  ip_hdr->version_ihl = (4 << 4) | (sizeof(struct ipv4_header) / 4); // IPv4, 20 bytes
   ip_hdr->type_of_service = 0;
-  ip_hdr->total_length = htons(sizeof(packet)); // 全体の長さ（IP + ICMP）
+  ip_hdr->total_length = htons(sizeof(struct ipv4_header) + sizeof(struct icmp_header) + sizeof(payload));
   ip_hdr->identification = htons(1);
   ip_hdr->flags_fragment_offset = htons(0);
   ip_hdr->ttl = 64;
-  ip_hdr->protocol = 1; // ICMPプロトコル番号
+  ip_hdr->protocol = 1; // icmp
   ip_hdr->header_checksum = 0;
-  ip_hdr->src_ip = htonl(MY_IP_ADDRESS);
-  ip_hdr->dst_ip = htonl(DEST_IP_ADDRESS);
+  ip_hdr->src_ip = htonl(src_ip_address);
+  ip_hdr->dst_ip = htonl(dst_ip_address);
+  ip_hdr->header_checksum = calculate_checksum((uint16_t *)ip_hdr, sizeof(struct ipv4_header));
 
-  // IPヘッダチェックサム計算
-  ip_hdr->header_checksum = calculate_checksum(ip_hdr, sizeof(struct ipv4_header));
-
-  // ICMPヘッダ設定
   icmp_hdr->type = 8;
   icmp_hdr->code = 0;
   icmp_hdr->checksum = 0;
   icmp_hdr->identifier = htons(12345);
   icmp_hdr->sequence = htons(1);
 
-  // データ部分（任意のペイロード）
-  char *data = (char *)(packet + sizeof(struct ipv4_header) + sizeof(struct icmp_header));
-  strcpy(data, "PING TEST");
+  // arbitrary data for payload
+  size_t hdr_len = sizeof(struct ethernet_header) + sizeof(struct ipv4_header) + sizeof(struct icmp_header);
+  char *data = (char *)(packet + hdr_len);
+  memcpy(data, payload, sizeof(payload));
 
-  // ICMPチェックサム計算（ヘッダ + データ部分）
-  icmp_hdr->checksum = calculate_checksum(icmp_hdr, sizeof(struct icmp_header) + strlen(data));
+  icmp_hdr->checksum = calculate_checksum((uint16_t *)icmp_hdr, sizeof(struct icmp_header) + sizeof(payload));
 
-  // Virtio-net経由で送信
+  size_t packet_size = hdr_len + sizeof(payload);
   virtio_net_transmit(packet, sizeof(packet));
 
-  printf("ICMP Echo Request sent successfully\n");
+  printf("ICMP Echo Request sent\n");
 }

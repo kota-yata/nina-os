@@ -13,7 +13,6 @@ void virtio_net_reg_fetch_and_or32(unsigned offset, uint32_t value) {
 }
 
 struct virtio_virtq *virtq_init(unsigned index) {
-  // size_t virtq_size = align_up((16 * VIRTQ_ENTRY_NUM) + (6 + 2 * VIRTQ_ENTRY_NUM) + (6 + 8 * VIRTQ_ENTRY_NUM), PAGE_SIZE);
   // paddr_t virtq_paddr = alloc_pages(virtq_size / PAGE_SIZE);
   paddr_t virtq_paddr = alloc_pages(align_up(sizeof(struct virtio_virtq), PAGE_SIZE) / PAGE_SIZE);
   struct virtio_virtq *vq = (struct virtio_virtq *) virtq_paddr;
@@ -149,39 +148,35 @@ void virtio_net_handler(void) {
 }
 
 void virtio_net_transmit(void *data, uint32_t len) {
-    struct virtio_virtq *vq = tx_vq; // TXキュー
+    struct virtio_virtq *vq = tx_vq;
 
-    // ディスクリプタIDを取得
+    // descriptor ID
     uint16_t desc_id = vq->avail.index % VIRTQ_ENTRY_NUM;
 
     paddr_t packet_paddr = alloc_pages(1);
 
-    // Virtio-netヘッダとパケットデータを準備
     struct virtio_net_hdr *hdr = (struct virtio_net_hdr *)packet_paddr;
     memset(hdr, 0, sizeof(struct virtio_net_hdr));
 
     void *packet_data = (void *)(packet_paddr + sizeof(struct virtio_net_hdr));
     memcpy(packet_data, data, len);
 
-    // ディスクリプタ設定
     vq->descs[desc_id].addr = packet_paddr;
     vq->descs[desc_id].len = sizeof(struct virtio_net_hdr) + len;
-    vq->descs[desc_id].flags = 0; // 次のディスクリプタなし
+    vq->descs[desc_id].flags = 0;
 
-    // Availリングにエントリ追加
+    // add descriptor to the available ring
     vq->avail.ring[vq->avail.index % VIRTQ_ENTRY_NUM] = desc_id;
     vq->avail.index++;
 
-    // デバイスに通知
-    __sync_synchronize(); // メモリバリア
+    __sync_synchronize();
     virtio_net_reg_write32(VIRTIO_REG_QUEUE_NOTIFY, vq->queue_index);
 
-    // 処理完了まで待機（ポーリング方式）
+    // wait until the packet is transmitted
     while (vq->last_used_index == *vq->used_index)
         ;
 
-    // Usedリングで完了確認
-    printf("Packet transmitted successfully\n");
+    return;
 }
 
 bool virtq_is_busy(struct virtio_virtq *vq) {
@@ -203,12 +198,4 @@ void debug_virtio_net(void) {
   if (status & VIRTIO_STATUS_DRIVER_OK) {
       printf("virtio-net: Driver ready\n");
   }
-  // check rx
-  printf("virtio-net: expected rx queue pfn=%x\n", rx_vq);
-  virtio_net_reg_write32(VIRTIO_REG_QUEUE_SEL, 0);
-  printf("virtio-net: actual rx queue pfn=%x\n", virtio_net_reg_read32(VIRTIO_REG_QUEUE_PFN));
-  // check tx
-  printf("virtio-net: expected tx queue pfn=%x\n", tx_vq);
-  virtio_net_reg_write32(VIRTIO_REG_QUEUE_SEL, 1);
-  printf("virtio-net: actual tx queue pfn=%x\n", virtio_net_reg_read32(VIRTIO_REG_QUEUE_PFN));
 }
