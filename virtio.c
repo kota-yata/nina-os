@@ -61,7 +61,7 @@ void virtio_net_qconfigure(void) {
   for (int i = 0; i < VIRTQ_ENTRY_NUM; i++) {
     paddr_t buf_paddr = alloc_pages(1);
     rx_vq->descs[i].addr = buf_paddr;
-    rx_vq->descs[i].len = PAGE_SIZE;
+    rx_vq->descs[i].len = PAGE_SIZE - sizeof(struct virtio_net_hdr);
     rx_vq->descs[i].flags = VIRTQ_DESC_F_WRITE;
     rx_vq->descs[i].next = (i + 1) % VIRTQ_ENTRY_NUM;
   }
@@ -123,23 +123,18 @@ void virtio_net_init(void) {
 }
 
 void virtio_net_handler(void) {
-  struct virtio_virtq *vq = rx_vq; // RXキュー
+  struct virtio_virtq *vq = rx_vq;
   uint16_t last_used = vq->last_used_index;
 
-  // ホストが使用したディスクリプタを確認
   while (last_used != *vq->used_index) {
-    // UsedリングからディスクリプタIDを取得
     uint32_t desc_id = vq->used.ring[last_used % VIRTQ_ENTRY_NUM].id;
 
-    // ディスクリプタからデータを取得
     struct virtio_net_hdr *hdr = (struct virtio_net_hdr *)(vq->descs[desc_id].addr);
     void *packet_data = (void *)(vq->descs[desc_id].addr + sizeof(struct virtio_net_hdr));
     uint32_t packet_len = vq->used.ring[last_used % VIRTQ_ENTRY_NUM].len - sizeof(struct virtio_net_hdr);
 
-    // 上位プロトコルスタックに渡す（ここではログ出力）
     printf("Received packet: length=%d\n", packet_len);
 
-    // ディスクリプタを再利用可能な状態に戻す
     vq->avail.ring[vq->avail.index % VIRTQ_ENTRY_NUM] = desc_id;
     vq->avail.index++;
     last_used++;
@@ -148,35 +143,35 @@ void virtio_net_handler(void) {
 }
 
 void virtio_net_transmit(void *data, uint32_t len) {
-    struct virtio_virtq *vq = tx_vq;
+  struct virtio_virtq *vq = tx_vq;
 
-    // descriptor ID
-    uint16_t desc_id = vq->avail.index % VIRTQ_ENTRY_NUM;
+  // descriptor ID
+  uint16_t desc_id = vq->avail.index % VIRTQ_ENTRY_NUM;
 
-    paddr_t packet_paddr = alloc_pages(1);
+  paddr_t packet_paddr = alloc_pages(1);
 
-    struct virtio_net_hdr *hdr = (struct virtio_net_hdr *)packet_paddr;
-    memset(hdr, 0, sizeof(struct virtio_net_hdr));
+  struct virtio_net_hdr *hdr = (struct virtio_net_hdr *)packet_paddr;
+  memset(hdr, 0, sizeof(struct virtio_net_hdr));
 
-    void *packet_data = (void *)(packet_paddr + sizeof(struct virtio_net_hdr));
-    memcpy(packet_data, data, len);
+  void *packet_data = (void *)(packet_paddr + sizeof(struct virtio_net_hdr));
+  memcpy(packet_data, data, len);
 
-    vq->descs[desc_id].addr = packet_paddr;
-    vq->descs[desc_id].len = sizeof(struct virtio_net_hdr) + len;
-    vq->descs[desc_id].flags = 0;
+  vq->descs[desc_id].addr = packet_paddr;
+  vq->descs[desc_id].len = sizeof(struct virtio_net_hdr) + len;
+  vq->descs[desc_id].flags = 0;
 
-    // add descriptor to the available ring
-    vq->avail.ring[vq->avail.index % VIRTQ_ENTRY_NUM] = desc_id;
-    vq->avail.index++;
+  // add descriptor to the available ring
+  vq->avail.ring[vq->avail.index % VIRTQ_ENTRY_NUM] = desc_id;
+  vq->avail.index++;
 
-    __sync_synchronize();
-    virtio_net_reg_write32(VIRTIO_REG_QUEUE_NOTIFY, vq->queue_index);
+  __sync_synchronize();
+  virtio_net_reg_write32(VIRTIO_REG_QUEUE_NOTIFY, vq->queue_index);
 
-    // wait until the packet is transmitted
-    while (vq->last_used_index == *vq->used_index)
-        ;
+  // wait until the packet is transmitted
+  while (vq->last_used_index == *vq->used_index)
+      ;
 
-    return;
+  return;
 }
 
 bool virtq_is_busy(struct virtio_virtq *vq) {
