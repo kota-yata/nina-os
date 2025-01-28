@@ -183,15 +183,6 @@ void debug_virtio_net(void) {
   printf("virtio-net: header size=%d\n", sizeof(struct virtio_net_hdr));
 
   uint32_t status = virtio_net_reg_read32(VIRTIO_REG_DEVICE_STATUS);
-  if (status & VIRTIO_STATUS_ACK) {
-    printf("virtio-net: Acknowledged\n");
-  }
-  if (status & VIRTIO_STATUS_DRIVER) {
-    printf("virtio-net: Driver status set\n");
-  }
-  if (status & VIRTIO_STATUS_FEAT_OK) {
-    printf("virtio-net: Features accepted\n");
-  }
   if (status & VIRTIO_STATUS_DRIVER_OK) {
     printf("virtio-net: Driver ready\n");
   }
@@ -223,6 +214,33 @@ struct virtio_blk_req *blk_req;
 paddr_t blk_req_paddr;
 unsigned blk_capacity;
 
+struct virtio_virtq *virtq_blk_init(unsigned index) {
+  paddr_t virtq_paddr = alloc_pages(align_up(sizeof(struct virtio_virtq), PAGE_SIZE) / PAGE_SIZE);
+  struct virtio_virtq *vq = (struct virtio_virtq *) virtq_paddr;
+  vq->queue_index = index;
+  vq->used_index = (volatile uint16_t *) &vq->used.index;
+  // select the queue writing its index to queuesel
+  virtio_blk_reg_write32(VIRTIO_REG_QUEUE_SEL, index);
+  // checks the queue is not already in use
+  uint32_t vq_pfn = virtio_blk_reg_read32(VIRTIO_REG_QUEUE_PFN);
+  if (vq_pfn != 0) {
+    PANIC("virtio: invalid queue pfn");
+  }
+  // read max queue size
+  uint32_t vq_size = virtio_blk_reg_read32(VIRTIO_REG_QUEUE_NUM_MAX);
+  if (vq_size == 0) {
+    PANIC("virtio: invalid queue size");
+  }
+  // omitting the step 4
+  // notify the device about the queue size
+  virtio_blk_reg_write32(VIRTIO_REG_QUEUE_NUM, VIRTQ_ENTRY_NUM);
+  // notify the device about the used alignment
+  virtio_blk_reg_write32(VIRTIO_REG_QUEUE_ALIGN, 0);
+  // write the physical number of the first page of the queue
+  virtio_blk_reg_write32(VIRTIO_REG_QUEUE_PFN, virtq_paddr);
+  return vq;
+}
+
 // notification to the host driver
 void virtq_kick(struct virtio_virtq *vq, int desc_index) {
   vq->avail.ring[vq->avail.index % VIRTQ_ENTRY_NUM] = desc_index;
@@ -251,7 +269,7 @@ void virtio_blk_init(void) {
   virtio_blk_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_ACK);
   virtio_blk_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER);
   virtio_blk_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_FEAT_OK);
-  blk_request_vq = virtq_init(0);
+  blk_request_vq = virtq_blk_init(0);
   virtio_blk_reg_write32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER_OK);
 
   blk_capacity = virtio_blk_reg_read64(VIRTIO_REG_DEVICE_CONFIG + 0) * SECTOR_SIZE;

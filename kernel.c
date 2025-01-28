@@ -376,10 +376,10 @@ void kernel_main(void) {
   strcpy(buf, "hello world\n");
   read_write_disk(buf, 0, true);
 
-  printf("Initializing virtio-net\n");
   virtio_net_init();
-  printf("virtio-net initialized\n");
   debug_virtio_net();
+
+  printf("----------------\n");
 
   send_icmp_echo_request();
 
