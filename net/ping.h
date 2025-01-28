@@ -1,5 +1,5 @@
 #pragma once
-#include "common.h"
+#include "../common.h"
 
 struct icmp_header {
   uint8_t type; // ICMP Type (8 for echo request, 0 for echo reply)
@@ -20,6 +20,18 @@ struct ipv4_header {
   uint16_t header_checksum;
   uint32_t src_ip;
     uint32_t dst_ip;
+} __attribute__((packed));
+
+struct arp_payload {
+  uint16_t hw_type;
+  uint16_t proto_type;
+  uint8_t hw_addr_len;
+  uint8_t proto_addr_len;
+  uint16_t opcode;
+  uint8_t sender_mac[6];
+  uint8_t sender_ip[4];
+  uint8_t target_mac[6];
+  uint8_t target_ip[4];
 } __attribute__((packed));
 
 struct ethernet_header {

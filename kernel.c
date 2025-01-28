@@ -1,7 +1,7 @@
 #include "kernel.h"
-#include "virtio.h"
+#include "net/virtio.h"
 #include "common.h"
-#include "ping.h"
+#include "net/ping.h"
 
 typedef unsigned char uint8_t;
 typedef unsigned int uint32_t;

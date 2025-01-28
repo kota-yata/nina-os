@@ -21,13 +21,13 @@ uint16_t calculate_checksum(uint16_t *header, int length) {
 
 const char payload[9] = "PING TEST";
 const uint32_t src_ip_address = 0xC0A86468; // 192.168.100.104
-const uint32_t dst_ip_address = 0xC0A86466; // 192.168.100.101
+const uint32_t dst_ip_address = 0xC0A86465; // 192.168.100.101
 const uint8_t src_mac_address[6] = {0x52, 0x54, 0x00, 0x12, 0x34, 0x56};
 // const uint8_t dst_mac_address[6] = {0x50, 0x6b, 0x4b, 0x08, 0x61, 0xde};
 const uint8_t dst_mac_address[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
 void send_icmp_echo_request() {
-  printf("Sending ICMP Echo Request to 192.168.100.1...\n");
+  printf("Sending ICMP Echo Request to 192.168.100.101...\n");
 
   // packet buffer
   uint8_t packet[128];

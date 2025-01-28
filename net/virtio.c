@@ -1,19 +1,21 @@
 #include "virtio.h"
-#include "kernel.h"
-#include "common.h"
+#include "../kernel.h"
+#include "../common.h"
 
 uint32_t virtio_net_reg_read32(unsigned offset) {
-    return *((volatile uint32_t *)(VIRTIO_NET_PADDR + offset));
+  return *((volatile uint32_t *)(VIRTIO_NET_PADDR + offset));
+}
+uint64_t virtio_reg_read64(unsigned offset) {
+  return *((volatile uint64_t *) (VIRTIO_NET_PADDR + offset));
 }
 void virtio_net_reg_write32(unsigned offset, uint32_t value) {
-    *((volatile uint32_t *)(VIRTIO_NET_PADDR + offset)) = value;
+  *((volatile uint32_t *)(VIRTIO_NET_PADDR + offset)) = value;
 }
 void virtio_net_reg_fetch_and_or32(unsigned offset, uint32_t value) {
   virtio_net_reg_write32(offset, virtio_net_reg_read32(offset) | value);
 }
 
 struct virtio_virtq *virtq_init(unsigned index) {
-  // paddr_t virtq_paddr = alloc_pages(virtq_size / PAGE_SIZE);
   paddr_t virtq_paddr = alloc_pages(align_up(sizeof(struct virtio_virtq), PAGE_SIZE) / PAGE_SIZE);
   struct virtio_virtq *vq = (struct virtio_virtq *) virtq_paddr;
   // memset(vq, 0, sizeof(struct virtio_virtq));
@@ -35,7 +37,7 @@ struct virtio_virtq *virtq_init(unsigned index) {
   // notify the device about the queue size
   virtio_net_reg_write32(VIRTIO_REG_QUEUE_NUM, VIRTQ_ENTRY_NUM);
   // notify the device about the used alignment
-  virtio_net_reg_write32(VIRTIO_REG_QUEUE_ALIGN, PAGE_SIZE);
+  virtio_net_reg_write32(VIRTIO_REG_QUEUE_ALIGN, 0);
   // write the physical number of the first page of the queue
   virtio_net_reg_write32(VIRTIO_REG_QUEUE_PFN, virtq_paddr / PAGE_SIZE);
   return vq;
@@ -55,29 +57,23 @@ struct virtio_virtq *tx_vq;
 
 void virtio_net_qconfigure(void) {
   rx_vq = virtq_init(0);
-  printf("virtio-net: descriptor size=%d\n", sizeof(struct virtq_desc));
-  printf("virtio-net: avail size=%d\n", sizeof(struct virtq_avail));
-  printf("virtio-net: used size=%d\n", sizeof(struct virtq_used));
+  printf("virtio-net: rx_vq addr=%x\n", rx_vq);
+
   for (int i = 0; i < VIRTQ_ENTRY_NUM; i++) {
-    paddr_t buf_paddr = alloc_pages(1);
+    paddr_t buf_paddr = alloc_pages(align_up(sizeof(struct virtio_net_hdr) + VIRTIO_NET_MAX_PACKET_SIZE, PAGE_SIZE) / PAGE_SIZE);
+    printf("virtio-net: rx_vq buf_paddr=%x\n", buf_paddr);
     rx_vq->descs[i].addr = buf_paddr;
-    rx_vq->descs[i].len = PAGE_SIZE - sizeof(struct virtio_net_hdr);
+    rx_vq->descs[i].len = sizeof(struct virtio_net_hdr) + VIRTIO_NET_MAX_PACKET_SIZE;
     rx_vq->descs[i].flags = VIRTQ_DESC_F_WRITE;
     rx_vq->descs[i].next = (i + 1) % VIRTQ_ENTRY_NUM;
+    rx_vq->avail.ring[rx_vq->avail.index % VIRTQ_ENTRY_NUM] = i;
+    rx_vq->avail.index++;
   }
-  rx_vq->avail.index = 0;
   rx_vq->used_index = (volatile uint16_t *)&rx_vq->used.index;
   rx_vq->last_used_index = 0;
   // init tx_vq
   tx_vq = virtq_init(1);
-  // for (int i = 0; i < VIRTQ_ENTRY_NUM; i++) {
-  //   paddr_t buf_paddr = alloc_pages(1);
-  //   // following fields will be populated during the actual transmission
-  //   tx_vq->descs[i].addr = 0;
-  //   tx_vq->descs[i].len = 0;
-  //   tx_vq->descs[i].flags = 0;
-  //   tx_vq->descs[i].next = (i + 1) % VIRTQ_ENTRY_NUM;
-  // }
+  printf("virtio-net: tx_vq addr=%x\n", tx_vq);
   tx_vq->avail.index = 0;
   tx_vq->used_index = (volatile uint16_t *)&tx_vq->used.index;
 }
@@ -104,7 +100,7 @@ void virtio_net_init(void) {
 
   uint32_t guest_features = 0;
   // // Negotiate features (e.g., MAC address support)
-  guest_features |= VIRTIO_NET_F_CSUM;
+  // guest_features |= VIRTIO_NET_F_CSUM;
   guest_features |= VIRTIO_NET_F_MAC;
   virtio_net_reg_write32(VIRTIO_REG_DRIVER_FEATURES, guest_features);
   virtio_net_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_FEAT_OK);
@@ -142,6 +138,7 @@ void virtio_net_handler(void) {
   vq->last_used_index = last_used;
 }
 
+// https://docs.oasis-open.org/virtio/virtio/v1.1/csprd01/virtio-v1.1-csprd01.html#x1-1560004:~:text=5.1.6.2.1%20Driver%20Requirements%3A%20Packet%20Transmission
 void virtio_net_transmit(void *data, uint32_t len) {
   struct virtio_virtq *vq = tx_vq;
 
@@ -179,18 +176,32 @@ bool virtq_is_busy(struct virtio_virtq *vq) {
 }
 
 void debug_virtio_net(void) {
+  printf("virtio-net: descriptor size=%d\n", sizeof(struct virtq_desc));
+  printf("virtio-net: avail size=%d\n", sizeof(struct virtq_avail));
+  printf("virtio-net: used size=%d\n", sizeof(struct virtq_used));
+  printf("virtio-net: virtq size=%d\n", sizeof(struct virtio_virtq));
+  printf("virtio-net: header size=%d\n", sizeof(struct virtio_net_hdr));
+
   uint32_t status = virtio_net_reg_read32(VIRTIO_REG_DEVICE_STATUS);
-  
   if (status & VIRTIO_STATUS_ACK) {
-      printf("virtio-net: Acknowledged\n");
+    printf("virtio-net: Acknowledged\n");
   }
   if (status & VIRTIO_STATUS_DRIVER) {
-      printf("virtio-net: Driver status set\n");
+    printf("virtio-net: Driver status set\n");
   }
   if (status & VIRTIO_STATUS_FEAT_OK) {
-      printf("virtio-net: Features accepted\n");
+    printf("virtio-net: Features accepted\n");
   }
   if (status & VIRTIO_STATUS_DRIVER_OK) {
-      printf("virtio-net: Driver ready\n");
+    printf("virtio-net: Driver ready\n");
   }
+
+  // checking rx_vq
+  virtio_net_reg_write32(VIRTIO_REG_QUEUE_SEL, 0);
+  printf("virtio-net: rx_vq addr=%x\n", rx_vq->descs[0].addr);
+  printf("virtio-net: rx_vq physical address=%x\n", virtio_net_reg_read32(VIRTIO_REG_QUEUE_PFN) * PAGE_SIZE);
+  // checking tx_vq
+  virtio_net_reg_write32(VIRTIO_REG_QUEUE_SEL, 1);
+  printf("virtio-net: tx_vq addr=%x\n", tx_vq->descs[0].addr);
+  printf("virtio-net: tx_vq physical address=%x\n", virtio_net_reg_read32(VIRTIO_REG_QUEUE_PFN) * PAGE_SIZE);
 }

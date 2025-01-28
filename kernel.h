@@ -56,6 +56,11 @@ struct process {
   uint8_t stack[8192];
 };
 
+struct free_page {
+  struct free_page *next;
+};
+static struct free_page *free_list = NULL;
+
 // virtual table
 #define SATP_SV32 (1u << 31)
 #define PAGE_V (1 << 0) // valid bit
