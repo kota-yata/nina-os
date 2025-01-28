@@ -33,3 +33,6 @@ int strcmp(const char *s1, const char *s2);
 void printf(const char *fmt, ...);
 uint16_t htons(uint16_t hostshort);
 uint32_t htonl(uint32_t hostlong);
+
+static uint8_t MY_MAC_ADDRESS[6] = {0x52, 0x54, 0x00, 0x12, 0x34, 0x56};
+static uint8_t MY_IP_ADDRESS[4] = {192, 168, 100, 104};

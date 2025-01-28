@@ -20,6 +20,20 @@ void *memcpy(void *dst, const void *src, size_t n) {
   return dst;
 }
 
+int memcmp(const void *s1, const void *s2, size_t n) {
+  const unsigned char *p1 = (const unsigned char *)s1;
+  const unsigned char *p2 = (const unsigned char *)s2;
+
+  while (n--) {
+    if (*p1 != *p2) {
+      return *p1 - *p2;
+    }
+    p1++;
+    p2++;
+  }
+  return 0;
+}
+
 void *strcpy(char *dst, const char *src) {
   char *d = dst;
   while (*src) {
@@ -39,6 +53,15 @@ int strcmp(const char *s1, const char *s2) {
   }
   return *(unsigned char *)s1 - *(unsigned char *)s2; // cast to unsigned char to align with POSIX standard
 }
+
+size_t strlen(const char *str) {
+  const char *s = str;
+  while (*s) {
+      s++;
+  }
+  return s - str;
+}
+
 
 void printf(const char *fmt, ...) {
   va_list vargs;
@@ -117,10 +140,12 @@ uint32_t htonl(uint32_t hostlong) {
   return hostlong;
 }
 
-size_t strlen(const char *str) {
-  const char *s = str;
-  while (*s) {
-      s++;
+uint16_t ntohs(uint16_t netshort) {
+  uint16_t test = 1;
+  uint8_t *byte = (uint8_t *)&test;
+  if (*byte == 1) { // for little endian
+    return (netshort >> 8) | (netshort << 8);
   }
-  return s - str;
+  return netshort; // for big endian
 }
+

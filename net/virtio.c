@@ -1,4 +1,7 @@
 #include "virtio.h"
+#include "eth.h"
+#include "ipv4.h"
+#include "arp.h"
 #include "../kernel.h"
 #include "../common.h"
 
@@ -128,8 +131,14 @@ void virtio_net_handler(void) {
     struct virtio_net_hdr *hdr = (struct virtio_net_hdr *)(vq->descs[desc_id].addr);
     void *packet_data = (void *)(vq->descs[desc_id].addr + sizeof(struct virtio_net_hdr));
     uint32_t packet_len = vq->used.ring[last_used % VIRTQ_ENTRY_NUM].len - sizeof(struct virtio_net_hdr);
+    struct ethernet_hdr *eth_hdr = (struct ethernet_hdr *)packet_data;
 
-    printf("Received packet: length=%d\n", packet_len);
+    if (ntohs(eth_hdr->type) == ETH_TYPE_ARP) {
+      struct arp_payload *arp = (struct arp_payload *)(packet_data + sizeof(struct ethernet_hdr));
+      if (ntohs(arp->opcode) == ARP_OP_REQUEST) {
+        handle_arp_req(eth_hdr, arp);
+      }
+    }
 
     vq->avail.ring[vq->avail.index % VIRTQ_ENTRY_NUM] = desc_id;
     vq->avail.index++;
