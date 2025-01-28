@@ -1,6 +1,7 @@
 #include "virtio.h"
 #include "eth.h"
 #include "ipv4.h"
+#include "icmp.h"
 #include "arp.h"
 #include "../kernel.h"
 #include "../common.h"
@@ -137,6 +138,13 @@ void virtio_net_handler(void) {
       struct arp_payload *arp = (struct arp_payload *)(packet_data + sizeof(struct ethernet_hdr));
       if (ntohs(arp->opcode) == ARP_OP_REQUEST) {
         handle_arp_req(eth_hdr, arp);
+      }
+    }
+    if (ntohs(eth_hdr->type) == ETH_TYPE_IPV4) {
+      struct ipv4_hdr *ip_hdr = (struct ipv4_hdr *)(packet_data + sizeof(struct ethernet_hdr));
+      if (ip_hdr->protocol == IPV4_PROTOCOL_ICMP) {
+        struct icmp_hdr *icmp_hdr = (struct icmp_hdr *)(packet_data + sizeof(struct ethernet_hdr) + sizeof(struct ipv4_hdr));
+        handle_icmp_echo_request(eth_hdr, ip_hdr, icmp_hdr);
       }
     }
 

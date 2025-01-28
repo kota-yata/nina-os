@@ -1,7 +1,7 @@
 #include "kernel.h"
 #include "net/virtio.h"
 #include "common.h"
-#include "net/ping.h"
+#include "net/icmp.h"
 
 typedef unsigned char uint8_t;
 typedef unsigned int uint32_t;

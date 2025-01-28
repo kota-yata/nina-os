@@ -1,7 +1,7 @@
 #include "virtio.h"
 #include "eth.h"
 #include "ipv4.h"
-#include "ping.h"
+#include "icmp.h"
 #include "../common.h"
 
 uint16_t calculate_checksum(uint16_t *header, int length) {
@@ -71,4 +71,28 @@ void send_icmp_echo_request() {
   virtio_net_transmit(packet, sizeof(packet));
 
   printf("ICMP Echo Request sent\n");
+}
+
+void handle_icmp_echo_request(struct ethernet_hdr *req_eth_hdr, struct ipv4_hdr *req_ip_hdr, struct icmp_hdr *req_icmp_hdr) {
+  printf("Received ICMP Echo Request\n");
+
+  struct ethernet_hdr *resp_eth_hdr = (struct ethernet_hdr *)req_eth_hdr;
+  struct ipv4_hdr *resp_ip_hdr = (struct ipv4_hdr *)(req_eth_hdr + 1);
+  struct icmp_hdr *resp_icmp_hdr = (struct icmp_hdr *)(req_eth_hdr + 1 + sizeof(struct ipv4_hdr));
+
+  memcpy(resp_eth_hdr->dst_mac, req_eth_hdr->src_mac, 6);
+  memcpy(resp_eth_hdr->src_mac, MY_MAC_ADDRESS, 6);
+  resp_eth_hdr->type = htons(ETH_TYPE_IPV4);
+
+  resp_ip_hdr->dst_ip = req_ip_hdr->src_ip;
+  resp_ip_hdr->src_ip = htonl(MY_IP_ADDRESS);
+
+  resp_icmp_hdr->type = 0;
+  resp_icmp_hdr->code = 0;
+  resp_icmp_hdr->checksum = 0;
+  resp_icmp_hdr->checksum = calculate_checksum((uint16_t *)resp_icmp_hdr, sizeof(struct icmp_hdr));
+
+  void *packet_data = (void *)resp_eth_hdr;
+  size_t packet_len = sizeof(struct ethernet_hdr) + sizeof(struct ipv4_hdr) + sizeof(struct icmp_hdr);
+  virtio_net_transmit(packet_data, packet_len);
 }

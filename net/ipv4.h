@@ -13,3 +13,5 @@ struct ipv4_hdr {
   uint32_t src_ip;
     uint32_t dst_ip;
 } __attribute__((packed));
+
+#define IPV4_PROTOCOL_ICMP 1
