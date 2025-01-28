@@ -10,13 +10,13 @@ void handle_arp_req(struct ethernet_hdr *req_eth_hdr, struct arp_payload *req_ar
   }
   printf("ARP request is for me\n");
   struct ethernet_hdr *resp_eth_hdr = (struct ethernet_hdr *)req_eth_hdr;
-  struct arp_payload *resp_arp = (struct arp_payload *)(req_eth_hdr + sizeof(struct ethernet_hdr));
+  struct arp_payload *resp_arp = req_arp_payload;
 
   memcpy(resp_eth_hdr->dst_mac, req_eth_hdr->src_mac, sizeof(resp_eth_hdr->dst_mac));
   memcpy(resp_eth_hdr->src_mac, MY_MAC_ADDRESS, sizeof(resp_eth_hdr->src_mac));
   resp_eth_hdr->type = htons(ETH_TYPE_ARP);
 
-  resp_arp->hw_type = htons(1);
+  resp_arp->hw_type = htons(ARP_HW_TYPE_ETH);
   resp_arp->proto_type = htons(ETH_TYPE_IPV4);
   resp_arp->hw_addr_len = 6;
   resp_arp->proto_addr_len = 4;

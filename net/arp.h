@@ -14,6 +14,7 @@ struct arp_payload {
   uint8_t target_ip[4];
 } __attribute__((packed));
 
+#define ARP_HW_TYPE_ETH 1
 #define ARP_OP_REQUEST 1
 #define ARP_OP_REPLY 2
 
