@@ -21,6 +21,8 @@ $QEMU -machine virt -bios default -nographic -serial mon:stdio --no-reboot \
   -d unimp,guest_errors -trace virtio_* -D qemu.log \
   -netdev bridge,id=net0,br=qemubr0,helper=/usr/lib/qemu/qemu-bridge-helper\
   -device virtio-net-device,netdev=net0,bus=virtio-mmio-bus.0,mac=52:54:00:12:34:56 \
+  -drive id=drive0,file=lorem.txt,format=raw,if=none \
+  -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.1 \
   -object filter-dump,id=f1,netdev=net0,file=virtio-net-kota.pcap\
   -global virtio-mmio.force-legacy=true\
   -kernel kernel.elf\

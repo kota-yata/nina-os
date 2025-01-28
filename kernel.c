@@ -255,8 +255,8 @@ struct process *create_process(const void *image, size_t image_size) {
     map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
   }
 
-  // map_page(page_table, VIRTIO_BLK_PADDR, VIRTIO_BLK_PADDR, PAGE_R | PAGE_W);
   map_page(page_table, VIRTIO_NET_PADDR, VIRTIO_NET_PADDR, PAGE_R | PAGE_W);
+  map_page(page_table, VIRTIO_BLK_PADDR, VIRTIO_BLK_PADDR, PAGE_R | PAGE_W);
 
   for (uint32_t off = 0; off < image_size; off += PAGE_SIZE) {
     paddr_t page = alloc_pages(1);
@@ -368,13 +368,13 @@ void kernel_main(void) {
   memset(__bss, 0, (size_t) __bss_end - (size_t) __bss);
   
   WRITE_CSR(stvec, (uint32_t) kernel_entry);
-  // virtio_blk_init();
+  virtio_blk_init();
 
-  // char buf[SECTOR_SIZE];
-  // read_write_disk(buf, 0, false);
-  // printf("sector 0: %s\n", buf);
-  // strcpy(buf, "hello world\n");
-  // read_write_disk(buf, 0, true);
+  char buf[SECTOR_SIZE];
+  read_write_disk(buf, 0, false);
+  printf("sector 0: %s\n", buf);
+  strcpy(buf, "hello world\n");
+  read_write_disk(buf, 0, true);
 
   printf("Initializing virtio-net\n");
   virtio_net_init();

@@ -31,6 +31,7 @@
 #define VIRTIO_BLK_T_IN  0
 #define VIRTIO_BLK_T_OUT 1
 #define VIRTIO_NET_PADDR 0x10001000
+#define VIRTIO_BLK_PADDR 0x10002000
 #define VIRTIO_NET_MAX_PACKET_SIZE 1514 // see https://docs.oasis-open.org/virtio/virtio/v1.1/csprd01/virtio-v1.1-csprd01.html#x1-1560004:~:text=headers%20and%20packets.-,5.1.6.3%20Setting%20Up%20Receive%20Buffers,-It%20is%20generally
 #define VIRTIO_NET_F_MAC (1 << 5)
 #define VIRTIO_NET_F_CSUM (1 << 0)
