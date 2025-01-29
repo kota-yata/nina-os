@@ -4,7 +4,7 @@ SECTIONS {
   . = 0x1000000;
 
   .text :{
-    KEEP(*(.text.start));
+    KEEP(*(.text.start)); /* keep the start symbol */
     *(.text .text.*);
   }
 
