@@ -381,15 +381,7 @@ void kernel_main(void) {
 
   printf("----------------\n");
 
-  send_icmp_echo_request();
-
-  // enable interrupts
-  // uint32_t sstatus = READ_CSR(sstatus);
-  // sstatus |= (1 << 1); // Set SIE (Supervisor Interrupt Enable)
-  // WRITE_CSR(sstatus, sstatus);
-  // uint32_t sie = READ_CSR(sie);
-  // sie |= (1 << 9); // Set SEIE (Supervisor External Interrupt Enable)
-  // WRITE_CSR(sie, sie);
+  // send_icmp_echo_request();
 
   idle_proc = create_process(NULL, 0);
   idle_proc->pid = -1;

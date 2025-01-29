@@ -23,7 +23,6 @@ uint16_t calculate_checksum(uint16_t *header, int length) {
 
 
 const char payload[9] = "PING TEST";
-const uint32_t src_ip_address = 0xC0A86468; // 192.168.100.104
 const uint32_t dst_ip_address = 0xC0A86465; // 192.168.100.101
 // const uint8_t dst_mac_address[6] = {0x50, 0x6b, 0x4b, 0x08, 0x61, 0xde};
 const uint8_t dst_mac_address[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
@@ -50,11 +49,11 @@ void send_icmp_echo_request() {
   ip_hdr->ttl = 64;
   ip_hdr->protocol = 1; // icmp
   ip_hdr->header_checksum = 0;
-  ip_hdr->src_ip = htonl(src_ip_address);
+  ip_hdr->src_ip = htonl(MY_IP_ADDRESS_32);
   ip_hdr->dst_ip = htonl(dst_ip_address);
   ip_hdr->header_checksum = calculate_checksum((uint16_t *)ip_hdr, sizeof(struct ipv4_hdr));
 
-  icmp_hdr->type = 8;
+  icmp_hdr->type = ICMP_TYPE_ECHO_REQUEST;
   icmp_hdr->code = 0;
   icmp_hdr->checksum = 0;
   icmp_hdr->identifier = htons(12345);
@@ -78,21 +77,34 @@ void handle_icmp_echo_request(struct ethernet_hdr *req_eth_hdr, struct ipv4_hdr 
 
   struct ethernet_hdr *resp_eth_hdr = (struct ethernet_hdr *)req_eth_hdr;
   struct ipv4_hdr *resp_ip_hdr = (struct ipv4_hdr *)(req_eth_hdr + 1);
-  struct icmp_hdr *resp_icmp_hdr = (struct icmp_hdr *)(req_eth_hdr + 1 + sizeof(struct ipv4_hdr));
+  struct icmp_hdr *resp_icmp_hdr = (struct icmp_hdr *)(resp_ip_hdr + 1);
+  size_t payload_len = ntohs(req_ip_hdr->total_length) - sizeof(struct ipv4_hdr) - sizeof(struct icmp_hdr);
+  printf("Payload length: %d\n", payload_len);
 
   memcpy(resp_eth_hdr->dst_mac, req_eth_hdr->src_mac, 6);
   memcpy(resp_eth_hdr->src_mac, MY_MAC_ADDRESS, 6);
   resp_eth_hdr->type = htons(ETH_TYPE_IPV4);
 
   resp_ip_hdr->dst_ip = req_ip_hdr->src_ip;
-  resp_ip_hdr->src_ip = htonl(MY_IP_ADDRESS);
+  resp_ip_hdr->src_ip = htonl(MY_IP_ADDRESS_32);
 
-  resp_icmp_hdr->type = 0;
+  resp_icmp_hdr->type = ICMP_TYPE_ECHO_REPLY;
   resp_icmp_hdr->code = 0;
   resp_icmp_hdr->checksum = 0;
-  resp_icmp_hdr->checksum = calculate_checksum((uint16_t *)resp_icmp_hdr, sizeof(struct icmp_hdr));
+  resp_icmp_hdr->checksum = calculate_checksum((uint16_t *)resp_icmp_hdr, sizeof(struct icmp_hdr) + payload_len);
 
   void *packet_data = (void *)resp_eth_hdr;
-  size_t packet_len = sizeof(struct ethernet_hdr) + sizeof(struct ipv4_hdr) + sizeof(struct icmp_hdr);
-  virtio_net_transmit(packet_data, packet_len);
+  size_t packet_len = ntohs(req_ip_hdr->total_length);
+  virtio_net_transmit(packet_data, packet_len + sizeof(struct ethernet_hdr));
+}
+
+void handle_icmp(struct ethernet_hdr *eth_hdr, struct ipv4_hdr *ip_hdr, uint32_t len) {
+  struct icmp_hdr *icmp_hdr = (struct icmp_hdr *)(ip_hdr + 1);
+  if (icmp_hdr->type == ICMP_TYPE_ECHO_REQUEST) {
+    handle_icmp_echo_request(eth_hdr, ip_hdr, icmp_hdr);
+  } else if (icmp_hdr->type == ICMP_TYPE_ECHO_REPLY) {
+    printf("Received ICMP Echo Reply\n");
+  } else {
+    printf("Unknown ICMP type %d\n", icmp_hdr->type);
+  }
 }

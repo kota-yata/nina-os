@@ -36,3 +36,4 @@ uint32_t htonl(uint32_t hostlong);
 
 static uint8_t MY_MAC_ADDRESS[6] = {0x52, 0x54, 0x00, 0x12, 0x34, 0x56};
 static uint8_t MY_IP_ADDRESS[4] = {192, 168, 100, 104};
+static uint32_t MY_IP_ADDRESS_32 = 0xC0A86468; // 192.168.100.104

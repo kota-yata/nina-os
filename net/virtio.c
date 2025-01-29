@@ -129,10 +129,7 @@ void virtio_net_handler(void) {
     }
     if (ntohs(eth_hdr->type) == ETH_TYPE_IPV4) {
       struct ipv4_hdr *ip_hdr = (struct ipv4_hdr *)(packet_data + sizeof(struct ethernet_hdr));
-      if (ip_hdr->protocol == IPV4_PROTOCOL_ICMP) {
-        struct icmp_hdr *icmp_hdr = (struct icmp_hdr *)(packet_data + sizeof(struct ethernet_hdr) + sizeof(struct ipv4_hdr));
-        handle_icmp_echo_request(eth_hdr, ip_hdr, icmp_hdr);
-      }
+      handle_ipv4(eth_hdr, ip_hdr, packet_len);
     }
 
     vq->avail.ring[vq->avail.index % VIRTQ_ENTRY_NUM] = desc_id;
