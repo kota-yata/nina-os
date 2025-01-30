@@ -123,9 +123,7 @@ void virtio_net_handler(void) {
 
     if (ntohs(eth_hdr->type) == ETH_TYPE_ARP) {
       struct arp_payload *arp = (struct arp_payload *)(packet_data + sizeof(struct ethernet_hdr));
-      if (ntohs(arp->opcode) == ARP_OP_REQUEST) {
-        handle_arp_req(eth_hdr, arp);
-      }
+      handle_arp(eth_hdr, arp);
     }
     if (ntohs(eth_hdr->type) == ETH_TYPE_IPV4) {
       struct ipv4_hdr *ip_hdr = (struct ipv4_hdr *)(packet_data + sizeof(struct ethernet_hdr));

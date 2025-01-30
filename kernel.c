@@ -2,6 +2,7 @@
 #include "net/virtio.h"
 #include "common.h"
 #include "net/icmp.h"
+#include "net/arp.h"
 
 typedef unsigned char uint8_t;
 typedef unsigned int uint32_t;
@@ -382,6 +383,7 @@ void kernel_main(void) {
   printf("----------------\n");
 
   // send_icmp_echo_request();
+  // send_arp_request((uint8_t[4]){192, 168, 100, 101});
 
   idle_proc = create_process(NULL, 0);
   idle_proc->pid = -1;
