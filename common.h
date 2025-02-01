@@ -41,4 +41,4 @@ static uint8_t NULL_MAC_ADDRESS[6] = {0, 0, 0, 0, 0, 0};
 static uint8_t MY_IP_ADDRESS[4] = {192, 168, 100, 104};
 static uint32_t MY_IP_ADDRESS_32 = 0xC0A86468; // 192.168.100.104
 
-uint32_t address8to32(uint8_t *address[4]);
+uint32_t address8to32(uint8_t *address);

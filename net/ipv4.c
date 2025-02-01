@@ -2,10 +2,10 @@
 #include "icmp.h"
 #include "../common.h"
 
-size_t create_ipv4_packet(uint8_t *buffer, uint8_t src_ip[4], uint8_t dst_ip[4], uint8_t protocol, const uint8_t *payload, size_t payload_len) {
+size_t create_ipv4_packet(uint8_t *buffer, uint8_t *src_ip, uint8_t *dst_ip, uint8_t protocol, const uint8_t *payload, size_t payload_len) {
   struct ipv4_hdr *ip_hdr = (struct ipv4_hdr *)buffer;
-  uint32_t src_ip_32 = address8to32(&src_ip);
-  uint32_t dst_ip_32 = address8to32(&dst_ip);
+  uint32_t src_ip_32 = address8to32(src_ip);
+  uint32_t dst_ip_32 = address8to32(dst_ip);
 
   ip_hdr->version_ihl = (4 << 4) | (sizeof(struct ipv4_hdr) / 4);
   ip_hdr->type_of_service = 0;

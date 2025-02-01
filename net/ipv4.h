@@ -20,4 +20,4 @@ struct ipv4_hdr {
 #define IPV4_PROTOCOL_UDP 17
 
 void handle_ipv4(struct ethernet_hdr *eth_hdr, struct ipv4_hdr *ip_hdr, uint32_t len);
-size_t create_ipv4_packet(uint8_t *buffer, uint8_t src_ip[4], uint8_t dst_ip[4], uint8_t protocol, const uint8_t *payload, size_t payload_len);
+size_t create_ipv4_packet(uint8_t *buffer, uint8_t *src_ip, uint8_t *dst_ip, uint8_t protocol, const uint8_t *payload, size_t payload_len);

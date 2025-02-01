@@ -132,10 +132,10 @@ uint32_t htonl(uint32_t hostlong) {
   uint16_t test = 1;
   uint8_t *byte = (uint8_t *)&test;
   if (*byte == 1) {
-    return ((hostlong >> 24) & 0x000000FF) | // 最上位バイトを最下位に
-            ((hostlong >> 8) & 0x0000FF00) | // 上位2バイトを中間に
-            ((hostlong << 8) & 0x00FF0000) | // 下位2バイトを中間に
-            ((hostlong << 24) & 0xFF000000); // 最下位バイトを最上位に
+    return ((hostlong >> 24) & 0x000000FF) |
+            ((hostlong >> 8) & 0x0000FF00) |
+            ((hostlong << 8) & 0x00FF0000) |
+            ((hostlong << 24) & 0xFF000000);
   }
   return hostlong;
 }
@@ -150,7 +150,7 @@ uint16_t ntohs(uint16_t netshort) {
 }
 
 // custom common functions
-uint32_t address8to32(uint8_t *address[4]) {
+uint32_t address8to32(uint8_t *address) {
   return ((uint32_t)address[0] << 24) |
          ((uint32_t)address[1] << 16) |
          ((uint32_t)address[2] << 8) |
