@@ -149,3 +149,11 @@ uint16_t ntohs(uint16_t netshort) {
   return netshort; // for big endian
 }
 
+// custom common functions
+uint32_t address8to32(uint8_t *address[4]) {
+  return ((uint32_t)address[0] << 24) |
+         ((uint32_t)address[1] << 16) |
+         ((uint32_t)address[2] << 8) |
+         ((uint32_t)address[3]);
+}
+

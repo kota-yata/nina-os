@@ -1,5 +1,6 @@
 #include "dpq.h"
 #include "eth.h"
+#include "virtio.h"
 #include "../common.h"
 
 /* Deferred Packet Queue Implmentation */
@@ -41,6 +42,7 @@ void process_deferred_packets(uint32_t dst_ip_address, uint8_t *mac_address) {
       memcpy(eth_hdr->dst_mac, mac_address, 6);
 
       virtio_net_transmit(entry->packet, entry->packet_size);
+      printf("Deferred packet sent\n");
 
       entry->dst_ip_address = 0;
     }

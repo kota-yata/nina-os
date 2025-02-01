@@ -359,7 +359,7 @@ void handle_trap(struct trap_frame *f) {
     virtio_net_handler();
     return;
   } else {
-    printf("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
+    // printf("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
   }
 
   WRITE_CSR(sepc, user_pc);
@@ -382,7 +382,7 @@ void kernel_main(void) {
 
   printf("----------------\n");
 
-  // send_icmp_echo_request();
+  send_icmp_echo_request();
   // send_arp_request((uint8_t[4]){192, 168, 100, 101});
 
   idle_proc = create_process(NULL, 0);

@@ -2,6 +2,7 @@
 #include "eth.h"
 #include "arp.h"
 #include "dpq.h"
+#include "virtio.h"
 
 struct arp_entry *arp_lookup(uint8_t ip[IP_ADDR_SIZE]) {
   for (int i = 0; i < ARP_TABLE_SIZE; i++) {
@@ -124,7 +125,6 @@ void handle_arp_reply(struct ethernet_hdr *eth_hdr, struct arp_payload *arp) {
 
 void handle_arp(struct ethernet_hdr *eth_hdr, struct arp_payload *arp) {
   if (ntohs(arp->opcode) == ARP_OP_REQUEST) {
-    printf("Received ARP request\n");
     handle_arp_req(eth_hdr, arp);
   } else if (ntohs(arp->opcode) == ARP_OP_REPLY) {
     handle_arp_reply(eth_hdr, arp);

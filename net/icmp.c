@@ -25,46 +25,33 @@ uint16_t calculate_checksum(uint16_t *header, int length) {
 const char payload[9] = "PING TEST";
 const uint8_t dst_ip_address[4] = {192, 168, 100, 101};
 
-size_t prepare_icmp_req(uint8_t *packet, const uint8_t *dst_ip_address) {
-  const uint32_t dst_ip_address_u32 =
-      ((uint32_t)dst_ip_address[0] << 24) |
-      ((uint32_t)dst_ip_address[1] << 16) |
-      ((uint32_t)dst_ip_address[2] << 8) |
-      ((uint32_t)dst_ip_address[3]);
+size_t create_icmp_packet(uint8_t *buffer, uint8_t type, uint8_t code, uint16_t identifier, uint16_t sequence, const char *payload, size_t payload_len) {
+  struct icmp_hdr *icmp_hdr = (struct icmp_hdr *)buffer;
 
-  struct ethernet_hdr *eth_hdr = (struct ethernet_hdr *)packet;
-  struct ipv4_hdr *ip_hdr = (struct ipv4_hdr *)(packet + sizeof(struct ethernet_hdr));
-  struct icmp_hdr *icmp_hdr = (struct icmp_hdr *)(packet + sizeof(struct ethernet_hdr) + sizeof(struct ipv4_hdr));
-
-  memset(eth_hdr->dst_mac, 0, 6);
-  memcpy(eth_hdr->src_mac, MY_MAC_ADDRESS, 6);
-  eth_hdr->type = htons(0x0800);
-
-  ip_hdr->version_ihl = (4 << 4) | (sizeof(struct ipv4_hdr) / 4);
-  ip_hdr->type_of_service = 0;
-  ip_hdr->total_length = htons(sizeof(struct ipv4_hdr) + sizeof(struct icmp_hdr) + sizeof(payload));
-  ip_hdr->identification = htons(1);
-  ip_hdr->flags_fragment_offset = htons(0);
-  ip_hdr->ttl = 64;
-  ip_hdr->protocol = 1;
-  ip_hdr->header_checksum = 0;
-  ip_hdr->src_ip = htonl(MY_IP_ADDRESS_32);
-  ip_hdr->dst_ip = htonl(dst_ip_address_u32);
-  ip_hdr->header_checksum = calculate_checksum((uint16_t *)ip_hdr, sizeof(struct ipv4_hdr));
-
-  icmp_hdr->type = ICMP_TYPE_ECHO_REQUEST;
-  icmp_hdr->code = 0;
+  icmp_hdr->type = type;
+  icmp_hdr->code = code;
   icmp_hdr->checksum = 0;
-  icmp_hdr->identifier = htons(12345);
-  icmp_hdr->sequence = htons(1);
+  icmp_hdr->identifier = htons(identifier);
+  icmp_hdr->sequence = htons(sequence);
 
-  size_t hdr_len = sizeof(struct ethernet_hdr) + sizeof(struct ipv4_hdr) + sizeof(struct icmp_hdr);
-  char *data = (char *)(packet + hdr_len);
-  memcpy(data, payload, sizeof(payload));
+  memcpy(buffer + sizeof(struct icmp_hdr), payload, payload_len);
 
-  icmp_hdr->checksum = calculate_checksum((uint16_t *)icmp_hdr, sizeof(struct icmp_hdr) + sizeof(payload));
+  // チェックサム計算
+  size_t total_len = sizeof(struct icmp_hdr) + payload_len;
+  icmp_hdr->checksum = calculate_checksum((uint16_t *)buffer, total_len);
 
-  return hdr_len + sizeof(payload);
+  return total_len;
+}
+
+size_t prepare_icmp_req(uint8_t *packet, const uint8_t *dst_ip_address) {
+  struct ethernet_hdr *eth_hdr = (struct ethernet_hdr *)packet;
+  struct ipv4_hdr *ipv4_hdr = (struct ipv4_hdr *)(packet + sizeof(struct ethernet_hdr));
+  struct icmp_hdr *icmp_hdr = (struct icmp_hdr *)(packet + sizeof(struct ethernet_hdr) + sizeof(struct ipv4_hdr));
+  size_t icmp_len = create_icmp_packet((uint8_t *)icmp_hdr, ICMP_TYPE_ECHO_REQUEST, 0, 12345, 1, payload, sizeof(payload));
+  size_t ipv4_len = create_ipv4_packet((uint8_t *)ipv4_hdr, MY_IP_ADDRESS, dst_ip_address, IPV4_PROTOCOL_ICMP, (uint8_t *)icmp_hdr, icmp_len);
+  size_t eth_len = create_ethernet_frame(packet, MY_MAC_ADDRESS, NULL_MAC_ADDRESS, ETH_TYPE_IPV4, (uint8_t *)ipv4_hdr, ipv4_len);
+
+  return eth_len;
 }
 
 
@@ -121,10 +108,10 @@ void handle_icmp_echo_request(struct ethernet_hdr *req_eth_hdr, struct ipv4_hdr 
   virtio_net_transmit(packet_data, packet_len + sizeof(struct ethernet_hdr));
 }
 
-void handle_icmp(struct ethernet_hdr *eth_hdr, struct ipv4_hdr *ip_hdr, uint32_t len) {
-  struct icmp_hdr *icmp_hdr = (struct icmp_hdr *)(ip_hdr + 1);
+void handle_icmp(struct ethernet_hdr *eth_hdr, struct ipv4_hdr *ipv4_hdr, uint32_t len) {
+  struct icmp_hdr *icmp_hdr = (struct icmp_hdr *)(ipv4_hdr + 1);
   if (icmp_hdr->type == ICMP_TYPE_ECHO_REQUEST) {
-    handle_icmp_echo_request(eth_hdr, ip_hdr, icmp_hdr);
+    handle_icmp_echo_request(eth_hdr, ipv4_hdr, icmp_hdr);
   } else if (icmp_hdr->type == ICMP_TYPE_ECHO_REPLY) {
     printf("Received ICMP Echo Reply\n");
   } else {

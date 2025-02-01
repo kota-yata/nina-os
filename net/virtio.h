@@ -100,3 +100,7 @@ struct virtio_net_ctrl_hdr {
 void virtio_net_init(void);
 void debug_virtio_net(void);
 void virtio_net_handler(void);
+void virtio_net_transmit(void *data, size_t len);
+
+void virtio_blk_init(void);
+void read_write_disk(void *buf, unsigned sector, int is_write);

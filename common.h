@@ -28,12 +28,17 @@ typedef uint32_t vaddr_t;
 
 void *memset(void *buf, char c, size_t n);
 void *memcpy(void *dst, const void *src, size_t n);
+int memcmp(const void *s1, const void *s2, size_t n);
 void *strcpy(char *dst, const char *src);
 int strcmp(const char *s1, const char *s2);
 void printf(const char *fmt, ...);
 uint16_t htons(uint16_t hostshort);
 uint32_t htonl(uint32_t hostlong);
+uint16_t ntohs(uint16_t netshort);
 
 static uint8_t MY_MAC_ADDRESS[6] = {0x52, 0x54, 0x00, 0x12, 0x34, 0x56};
+static uint8_t NULL_MAC_ADDRESS[6] = {0, 0, 0, 0, 0, 0};
 static uint8_t MY_IP_ADDRESS[4] = {192, 168, 100, 104};
 static uint32_t MY_IP_ADDRESS_32 = 0xC0A86468; // 192.168.100.104
+
+uint32_t address8to32(uint8_t *address[4]);
