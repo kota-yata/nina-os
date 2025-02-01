@@ -1,6 +1,6 @@
 #include "dpq.h"
 #include "eth.h"
-#include "virtio.h"
+#include "virtnet.h"
 #include "../common.h"
 
 /* Deferred Packet Queue Implmentation */

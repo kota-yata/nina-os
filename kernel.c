@@ -1,5 +1,6 @@
 #include "kernel.h"
-#include "net/virtio.h"
+#include "net/virtnet.h"
+#include "blk/virtblk.c"
 #include "common.h"
 #include "net/icmp.h"
 #include "net/arp.h"

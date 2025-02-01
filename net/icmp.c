@@ -1,4 +1,4 @@
-#include "virtio.h"
+#include "virtnet.h"
 #include "eth.h"
 #include "ipv4.h"
 #include "arp.h"
@@ -36,7 +36,6 @@ size_t create_icmp_packet(uint8_t *buffer, uint8_t type, uint8_t code, uint16_t 
 
   memcpy(buffer + sizeof(struct icmp_hdr), payload, payload_len);
 
-  // チェックサム計算
   size_t total_len = sizeof(struct icmp_hdr) + payload_len;
   icmp_hdr->checksum = calculate_checksum((uint16_t *)buffer, total_len);
 

@@ -2,7 +2,7 @@
 #include "eth.h"
 #include "arp.h"
 #include "dpq.h"
-#include "virtio.h"
+#include "virtnet.h"
 
 struct arp_entry *arp_lookup(uint8_t ip[IP_ADDR_SIZE]) {
   for (int i = 0; i < ARP_TABLE_SIZE; i++) {
